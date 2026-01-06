@@ -2195,13 +2195,15 @@ class LocatarioController extends Controller
                 
             case 5: // Confirmação
                 $termosAceitos = $this->input('termo_aceite');
+                $lgpdAceite = $this->input('lgpd_aceite');
                 
-                if (!$termosAceitos) {
-                    $this->redirect($urlBase('/etapa/5?error=' . urlencode('Você deve aceitar os termos para continuar')));
+                if (!$termosAceitos || !$lgpdAceite) {
+                    $this->redirect($urlBase('/etapa/5?error=' . urlencode('É necessário aceitar os termos e a LGPD para continuar')));
                     return;
                 }
                 
                 $_SESSION['solicitacao_manual']['termos_aceitos'] = true;
+                $_SESSION['solicitacao_manual']['lgpd_aceite'] = $lgpdAceite;
                 
                 // Finalizar e salvar (passar o token se estiver em modo token)
                 $this->finalizarSolicitacaoManual($token);
@@ -2791,6 +2793,7 @@ class LocatarioController extends Controller
                         'horarios_preferenciais' => $dados['horarios_preferenciais'] ?? [],
                         'fotos' => $dados['fotos'] ?? [],
                         'termos_aceitos' => $dados['termos_aceitos'],
+                        'lgpd_aceite' => $dados['lgpd_aceite'] ?? null,
                         'updated_at' => date('Y-m-d H:i:s')
                     ];
                     
@@ -2869,7 +2872,8 @@ class LocatarioController extends Controller
                 'tipo_qualificacao' => null,
                 'horarios_preferenciais' => $dados['horarios_preferenciais'] ?? [],
                 'fotos' => $dados['fotos'] ?? [],
-                'termos_aceitos' => $dados['termos_aceitos']
+                'termos_aceitos' => $dados['termos_aceitos'],
+                'lgpd_aceite' => $dados['lgpd_aceite'] ?? null
             ];
             
             // Remover lógica de token na criação - não é mais necessária

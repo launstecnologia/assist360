@@ -1373,7 +1373,7 @@ function gerarResumoEtapas($etapaAtual, $locatario) {
                         <input type="checkbox" name="lgpd_aceite" id="lgpd_aceite" value="1" required
                                class="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded">
                         <span class="ml-3 text-sm text-blue-900">
-                            Li e aceito o tratamento de meus dados pessoais conforme a <a href="<?= url('Public/assets/pdf/CONDICOES_GERAIS_ASSIST_KSS_RESIDENCIAL.pdf') ?>" target="_blank" class="underline font-medium text-blue-700 hover:text-blue-900">Lei Geral de Proteção de Dados (LGPD)</a>. Autorizo o uso de meus dados exclusivamente para o gerenciamento desta solicitação de serviço.
+                            Li e aceito o tratamento de meus dados pessoais conforme a <a href="#" onclick="abrirModalLGPD(); return false;" class="underline font-medium text-blue-700 hover:text-blue-900">Lei Geral de Proteção de Dados (LGPD)</a>. Autorizo o uso de meus dados exclusivamente para o gerenciamento desta solicitação de serviço.
                             <span class="text-red-600">*</span>
                         </span>
                     </label>
@@ -3279,6 +3279,43 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
+<!-- Modal de LGPD -->
+<div id="modal-lgpd" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">Política de Privacidade (LGPD)</h3>
+            <button onclick="fecharModalLGPD()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div class="px-6 py-4 space-y-4 text-sm text-gray-700">
+            <p>A sua privacidade é importante para nós. Esta Política de Privacidade descreve como coletamos, usamos, armazenamos e protegemos os dados pessoais dos usuários, em conformidade com a <strong>Lei Geral de Proteção de Dados (Lei nº 13.709/2018 – LGPD)</strong>.</p>
+            
+            <p><strong>1. Dados Coletados:</strong> Podemos coletar os seguintes dados pessoais: nome completo, e-mail, telefone/WhatsApp, CPF/CNPJ, endereço completo (CEP, rua, número, complemento, bairro, cidade, estado), endereço IP, dados de acesso e navegação, informações fornecidas voluntariamente pelo usuário em formulários, fotos e documentos enviados.</p>
+            
+            <p><strong>2. Finalidade do Tratamento:</strong> Os dados pessoais são utilizados para: identificação e autenticação do usuário, prestação dos serviços oferecidos pela aplicação, gerenciamento de solicitações de assistência técnica, comunicação com o usuário (notificações, atualizações de status), cumprimento de obrigações legais e regulatórias, melhoria da experiência do usuário, análise estatística e desenvolvimento de novos serviços.</p>
+            
+            <p><strong>3. Base Legal:</strong> O tratamento dos dados é realizado com base em: <strong>consentimento do titular</strong> (quando você aceita esta política e autoriza o uso de seus dados), <strong>execução de contrato</strong> (para cumprimento de obrigações contratuais), <strong>cumprimento de obrigação legal</strong> (quando exigido por lei ou autoridade competente), <strong>legítimo interesse</strong> (para melhorias de serviço e segurança, quando aplicável).</p>
+            
+            <p><strong>4. Compartilhamento de Dados:</strong> Os dados pessoais <strong>não são vendidos</strong> a terceiros. Poderão ser compartilhados apenas quando: exigido por lei ou autoridade competente, necessário para a execução do serviço (ex: provedores de hospedagem, serviços de comunicação), com prestadores de serviços que atuam como processadores de dados, sob contrato de confidencialidade.</p>
+            
+            <p><strong>5. Armazenamento e Segurança:</strong> Adotamos medidas técnicas e administrativas para proteger os dados pessoais contra acessos não autorizados, vazamentos, alterações indevidas e destruição. Utilizamos tecnologias de criptografia, controle de acesso e monitoramento contínuo para garantir a segurança das informações.</p>
+            
+            <p><strong>6. Direitos do Titular:</strong> O titular dos dados pode, a qualquer momento: confirmar a existência de tratamento de dados, acessar seus dados pessoais, corrigir dados incompletos, inexatos ou desatualizados, solicitar anonimização, bloqueio ou eliminação de dados desnecessários, solicitar portabilidade dos dados, revogar o consentimento, obter informações sobre compartilhamento de dados. Solicitações podem ser feitas pelo e-mail: <a href="mailto:contato@ksssolucoes.com.br" class="text-blue-600 hover:text-blue-800 underline">contato@ksssolucoes.com.br</a></p>
+            
+            <p><strong>7. Retenção dos Dados:</strong> Os dados serão mantidos apenas pelo tempo necessário para cumprir as finalidades descritas nesta política, para cumprimento de obrigações legais ou regulatórias, ou conforme período estabelecido em lei. Após esse período, os dados serão eliminados ou anonimizados de forma segura.</p>
+            
+            <p><strong>8. Alterações:</strong> Esta Política de Privacidade pode ser atualizada a qualquer momento para refletir mudanças em nossas práticas ou por requisitos legais. Recomendamos a revisão periódica desta política. A data da última atualização será indicada no documento.</p>
+        </div>
+        <div class="border-t border-gray-200 px-6 py-4">
+            <button onclick="fecharModalLGPD()" 
+                    class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                Entendi
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Limite Atingido -->
 <div id="modal-limite-atingido" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -3468,6 +3505,37 @@ document.addEventListener('keydown', function(e) {
         if (modal && !modal.classList.contains('hidden')) {
             fecharModalCondicoesGerais();
         }
+        const modalLGPD = document.getElementById('modal-lgpd');
+        if (modalLGPD && !modalLGPD.classList.contains('hidden')) {
+            fecharModalLGPD();
+        }
+    }
+});
+
+// === Modal de LGPD ===
+function abrirModalLGPD() {
+    const modal = document.getElementById('modal-lgpd');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function fecharModalLGPD() {
+    const modal = document.getElementById('modal-lgpd');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Fechar modal de LGPD ao clicar fora dele
+document.addEventListener('DOMContentLoaded', function() {
+    const modalLGPD = document.getElementById('modal-lgpd');
+    if (modalLGPD) {
+        modalLGPD.addEventListener('click', function(e) {
+            if (e.target === modalLGPD) {
+                fecharModalLGPD();
+            }
+        });
     }
 });
 </script>
