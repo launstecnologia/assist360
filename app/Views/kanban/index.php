@@ -47,7 +47,7 @@ ob_start();
 </div>
 
 <!-- Kanban Board -->
-<div class="flex gap-4 overflow-x-auto pb-4">
+<div id="kanban-container" class="flex gap-4 overflow-x-auto pb-4" style="cursor: grab;">
     <?php foreach ($statusKanban as $status): ?>
     <div class="kanban-column flex-shrink-0 w-80 bg-gray-50 rounded-lg p-4">
         <!-- Header da Coluna -->
@@ -5387,6 +5387,88 @@ document.addEventListener('change', function(e) {
         }
         window.open(url, '_blank');
     }
+    
+    // ============================================
+    // DRAG HORIZONTAL NO KANBAN (Click and Drag)
+    // ============================================
+    (function() {
+        const kanbanContainer = document.getElementById('kanban-container');
+        if (!kanbanContainer) return;
+        
+        let isDown = false;
+        let startX;
+        let scrollLeft;
+        
+        // Mouse down - iniciar arraste
+        kanbanContainer.addEventListener('mousedown', (e) => {
+            // Não iniciar arraste se clicar em um card ou botão
+            if (e.target.closest('.kanban-card') || 
+                e.target.closest('button') || 
+                e.target.closest('a') ||
+                e.target.closest('input') ||
+                e.target.closest('select') ||
+                e.target.closest('textarea')) {
+                return;
+            }
+            
+            isDown = true;
+            kanbanContainer.style.cursor = 'grabbing';
+            kanbanContainer.style.userSelect = 'none';
+            startX = e.pageX - kanbanContainer.offsetLeft;
+            scrollLeft = kanbanContainer.scrollLeft;
+        });
+        
+        // Mouse leave - parar arraste
+        kanbanContainer.addEventListener('mouseleave', () => {
+            isDown = false;
+            kanbanContainer.style.cursor = 'grab';
+            kanbanContainer.style.userSelect = '';
+        });
+        
+        // Mouse up - parar arraste
+        kanbanContainer.addEventListener('mouseup', () => {
+            isDown = false;
+            kanbanContainer.style.cursor = 'grab';
+            kanbanContainer.style.userSelect = '';
+        });
+        
+        // Mouse move - arrastar
+        kanbanContainer.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - kanbanContainer.offsetLeft;
+            const walk = (x - startX) * 2; // Velocidade do scroll (2x mais rápido)
+            kanbanContainer.scrollLeft = scrollLeft - walk;
+        });
+        
+        // Touch events para dispositivos móveis
+        let touchStartX = 0;
+        let touchScrollLeft = 0;
+        
+        kanbanContainer.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.kanban-card') || 
+                e.target.closest('button') || 
+                e.target.closest('a') ||
+                e.target.closest('input') ||
+                e.target.closest('select') ||
+                e.target.closest('textarea')) {
+                return;
+            }
+            touchStartX = e.touches[0].pageX;
+            touchScrollLeft = kanbanContainer.scrollLeft;
+        }, { passive: true });
+        
+        kanbanContainer.addEventListener('touchmove', (e) => {
+            if (!touchStartX) return;
+            const touchX = e.touches[0].pageX;
+            const walk = (touchX - touchStartX) * 2;
+            kanbanContainer.scrollLeft = touchScrollLeft - walk;
+        }, { passive: true });
+        
+        kanbanContainer.addEventListener('touchend', () => {
+            touchStartX = 0;
+        });
+    })();
 </script>
 
 
