@@ -95,7 +95,7 @@ abstract class Model
         $params = array_merge(array_values($fillableData), [$id]);
         
         try {
-            $stmt = Database::query($sql, $params);
+            Database::query($sql, $params);
             // Retorna true se a query foi executada sem erros
             // Não importa se linhas foram afetadas ou não
             return true;

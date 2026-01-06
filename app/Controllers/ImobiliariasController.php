@@ -1207,10 +1207,8 @@ class ImobiliariasController extends Controller
 
             // Remover registro usando DELETE direto
             $sqlDelete = "DELETE FROM locatarios_contratos WHERE id = ?";
-            $stmt = \App\Core\Database::query($sqlDelete, [$id]);
-            
             // Verificar quantas linhas foram afetadas
-            $rowsAffected = $stmt->rowCount();
+            $rowsAffected = \App\Core\Database::execute($sqlDelete, [$id]);
             error_log("Linhas afetadas pelo DELETE: {$rowsAffected}");
             
             // Fechar cursor para garantir que não há bloqueios

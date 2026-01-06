@@ -647,13 +647,11 @@ class UploadController extends Controller
                                           (updated_at >= ? AND updated_at <= ?)
                                       )";
                 
-                $stmt = \App\Core\Database::query($sqlDeleteContratos, [
+                $registrosRemovidos = \App\Core\Database::execute($sqlDeleteContratos, [
                     $imobiliariaId,
                     $dataInicio, $dataFim,
                     $dataInicio, $dataFim
                 ]);
-                
-                $registrosRemovidos = $stmt->rowCount();
                 error_log("IMPORTAÇÃO REMOÇÃO: Removidos {$registrosRemovidos} registro(s) de locatarios_contratos para imobiliaria_id={$imobiliariaId} no período do upload (ID histórico: {$id})");
                 
             } catch (\Exception $e) {

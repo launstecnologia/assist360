@@ -102,8 +102,8 @@ class Locatario extends Model
     {
         $sql = "UPDATE {$this->table} SET whatsapp = ?, updated_at = NOW() WHERE id = ?";
         try {
-            $stmt = Database::query($sql, [$whatsapp, $locatarioId]);
-            return $stmt->rowCount() > 0;
+            $rowsAffected = Database::execute($sql, [$whatsapp, $locatarioId]);
+            return $rowsAffected > 0;
         } catch (\Exception $e) {
             error_log('Erro ao atualizar WhatsApp: ' . $e->getMessage());
             return false;
@@ -143,8 +143,8 @@ class Locatario extends Model
         $sql = "UPDATE {$this->table} SET " . implode(', ', $updateFields) . ", updated_at = NOW() WHERE id = ?";
         
         try {
-            $stmt = Database::query($sql, $values);
-            $sucesso = $stmt->rowCount() > 0;
+            $rowsAffected = Database::execute($sql, $values);
+            $sucesso = $rowsAffected > 0;
             
             // ✅ Se o nome foi atualizado, atualizar em TODAS as solicitações relacionadas
             if ($sucesso && $nomeAtualizado !== null) {
