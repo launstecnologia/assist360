@@ -1,0 +1,24 @@
+RewriteEngine On
+
+# Permitir arquivos estáticos
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Redirecionar tudo para o index.php
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Configurações de segurança
+<Files ".env">
+    Require all denied
+</Files>
+
+<Files "composer.json">
+    Require all denied
+</Files>
+
+<Files "composer.lock">
+    Require all denied
+</Files>

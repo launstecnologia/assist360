@@ -1,0 +1,191 @@
+<?php
+
+namespace App\Models;
+
+use App\Core\Database;
+
+abstract class Model
+{
+    protected string $table;
+    protected string $primaryKey = 'id';
+    protected array $fillable = [];
+    protected array $hidden = [];
+    protected array $casts = [];
+
+    public function find(int $id): ?array
+    {
+        $sql = "SELECT * FROM {$this->table} WHERE {$this->primaryKey} = ?";
+        return Database::fetch($sql, [$id]);
+    }
+
+    public function findAll(array $conditions = [], string $orderBy = null, int $limit = null): array
+    {
+        $sql = "SELECT * FROM {$this->table}";
+        $params = [];
+
+        if (!empty($conditions)) {
+            $whereClause = [];
+            foreach ($conditions as $field => $value) {
+                $whereClause[] = "$field = ?";
+                $params[] = $value;
+            }
+            $sql .= " WHERE " . implode(' AND ', $whereClause);
+        }
+
+        if ($orderBy) {
+            $sql .= " ORDER BY $orderBy";
+        }
+
+        if ($limit) {
+            $sql .= " LIMIT $limit";
+        }
+
+        return Database::fetchAll($sql, $params);
+    }
+
+    public function create(array $data): int
+    {
+        $fillableData = $this->filterFillable($data);
+        
+        // Log para debug se status_id estiver presente
+        if (isset($fillableData['status_id'])) {
+            error_log("Model::create [{$this->table}] - status_id antes do INSERT: " . ($fillableData['status_id'] ?? 'NULL'));
+            error_log("Model::create [{$this->table}] - Tipo: " . gettype($fillableData['status_id']));
+        } else {
+            error_log("Model::create [{$this->table}] - status_id NÃO está presente no fillableData!");
+        }
+        
+        $fields = array_keys($fillableData);
+        $placeholders = array_fill(0, count($fields), '?');
+        
+        $sql = "INSERT INTO {$this->table} (" . implode(', ', $fields) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        
+        // Preparar valores garantindo que status_id nunca seja null
+        $values = [];
+        foreach ($fields as $field) {
+            $value = $fillableData[$field];
+            // Se for status_id e for null, usar 1 como fallback
+            if ($field === 'status_id' && ($value === null || $value === '' || (is_numeric($value) && $value <= 0))) {
+                error_log("Model::create [{$this->table}] - ⚠️ ATENÇÃO: status_id estava inválido, usando fallback 1");
+                $value = 1;
+            }
+            $values[] = $value;
+        }
+        
+        error_log("Model::create [{$this->table}] - SQL: " . $sql);
+        error_log("Model::create [{$this->table}] - Valores: " . json_encode($values));
+        
+        Database::query($sql, $values);
+        return (int) Database::lastInsertId();
+    }
+
+    public function update(int $id, array $data): bool
+    {
+        $fillableData = $this->filterFillable($data);
+        
+        // Se não há dados para atualizar, retorna true (não é erro)
+        if (empty($fillableData)) {
+            return true;
+        }
+        
+        $fields = array_keys($fillableData);
+        $setClause = array_map(fn($field) => "$field = ?", $fields);
+        
+        $sql = "UPDATE {$this->table} SET " . implode(', ', $setClause) . " WHERE {$this->primaryKey} = ?";
+        $params = array_merge(array_values($fillableData), [$id]);
+        
+        try {
+            $stmt = Database::query($sql, $params);
+            // Retorna true se a query foi executada sem erros
+            // Não importa se linhas foram afetadas ou não
+            return true;
+        } catch (\PDOException $e) {
+            error_log("Erro no update [Table: {$this->table}, ID: {$id}]: " . $e->getMessage());
+            error_log("SQL: " . $sql);
+            error_log("Params: " . json_encode($params));
+            error_log("Stack trace: " . $e->getTraceAsString());
+            // Relançar a exceção para que o controller possa tratá-la
+            throw $e;
+        }
+    }
+
+    public function delete(int $id): bool
+    {
+        // Primeiro verificar se o registro existe
+        if (!$this->exists($id)) {
+            return false;
+        }
+        
+        // Deletar o registro
+        $sql = "DELETE FROM {$this->table} WHERE {$this->primaryKey} = ?";
+        Database::query($sql, [$id]);
+        
+        // Verificar se foi realmente deletado
+        return !$this->exists($id);
+    }
+
+    public function exists(int $id): bool
+    {
+        $sql = "SELECT 1 FROM {$this->table} WHERE {$this->primaryKey} = ?";
+        return Database::fetch($sql, [$id]) !== null;
+    }
+
+    public function count(array $conditions = []): int
+    {
+        $sql = "SELECT COUNT(*) as count FROM {$this->table}";
+        $params = [];
+
+        if (!empty($conditions)) {
+            $whereClause = [];
+            foreach ($conditions as $field => $value) {
+                $whereClause[] = "$field = ?";
+                $params[] = $value;
+            }
+            $sql .= " WHERE " . implode(' AND ', $whereClause);
+        }
+
+        $result = Database::fetch($sql, $params);
+        return (int) $result['count'];
+    }
+
+    protected function filterFillable(array $data): array
+    {
+        if (empty($this->fillable)) {
+            return $data;
+        }
+
+        return array_intersect_key($data, array_flip($this->fillable));
+    }
+
+    protected function cast(array $data): array
+    {
+        foreach ($this->casts as $field => $type) {
+            if (isset($data[$field])) {
+                switch ($type) {
+                    case 'int':
+                    case 'integer':
+                        $data[$field] = (int) $data[$field];
+                        break;
+                    case 'float':
+                    case 'double':
+                        $data[$field] = (float) $data[$field];
+                        break;
+                    case 'bool':
+                    case 'boolean':
+                        $data[$field] = (bool) $data[$field];
+                        break;
+                    case 'json':
+                        $data[$field] = json_decode($data[$field], true);
+                        break;
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    protected function hide(array $data): array
+    {
+        return array_diff_key($data, array_flip($this->hidden));
+    }
+}

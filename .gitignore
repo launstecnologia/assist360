@@ -1,0 +1,6 @@
+.env
+app/Config/
+storage/
+vendor/
+*.log
+*.csv
