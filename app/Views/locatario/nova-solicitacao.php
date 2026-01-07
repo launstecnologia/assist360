@@ -833,7 +833,7 @@ function gerarResumoEtapas($etapaAtual, $locatario) {
                     <input type="file" id="fotos" name="fotos[]" multiple accept="image/*"
                            class="hidden" onchange="previewPhotos(this)">
                     <input type="file" id="fotos-camera" name="fotos[]" multiple accept="image/*" capture="environment"
-                           class="hidden" onchange="previewPhotos(this)">
+                           class="hidden">
                     
                     <!-- Modal para escolher entre câmera ou arquivos -->
                     <div id="modal-foto" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
@@ -2467,9 +2467,9 @@ document.addEventListener('DOMContentLoaded', function() {
     window.escolherCamera = function() {
         const inputCamera = document.getElementById('fotos-camera');
         if (inputCamera) {
+            // Não fechar o modal imediatamente - deixar o evento change fazer isso
+            // Isso garante que a foto seja capturada antes de fechar
             inputCamera.click();
-            // Fechar modal imediatamente após clicar (o listener do change também vai fechar como backup)
-            setTimeout(() => fecharModalFoto(), 100);
         } else {
             fecharModalFoto();
         }
@@ -2567,6 +2567,10 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('✅ Adicionando listener para fechar modal no inputCamera');
             inputCamera.addEventListener('change', function(e) {
                 console.log('📷 Evento change disparado no inputCamera', e.target.files);
+                // Garantir que previewPhotos seja chamado explicitamente
+                if (e.target.files && e.target.files.length > 0) {
+                    previewPhotos(this);
+                }
                 fecharModalFoto(); // Fechar modal após seleção
             });
             inputCamera.dataset.listenerAdicionado = 'true';
@@ -2574,6 +2578,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     window.previewPhotos = function(input) {
+        console.log('🖼️ previewPhotos chamado, input:', input ? input.id : 'null');
         const preview = document.getElementById('fotos-preview');
         const loadingOverlay = document.getElementById('fotos-loading');
         const inputArquivo = document.getElementById('fotos');
@@ -2581,12 +2586,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Combinar arquivos de ambos os inputs
         let allFiles = [];
-        if (inputArquivo && inputArquivo.files) {
+        if (inputArquivo && inputArquivo.files && inputArquivo.files.length > 0) {
             allFiles = Array.from(inputArquivo.files);
+            console.log('📁 Arquivos do inputArquivo:', allFiles.length);
         }
-        if (inputCamera && inputCamera.files) {
-            allFiles = allFiles.concat(Array.from(inputCamera.files));
+        if (inputCamera && inputCamera.files && inputCamera.files.length > 0) {
+            const cameraFiles = Array.from(inputCamera.files);
+            console.log('📷 Arquivos do inputCamera:', cameraFiles.length);
+            allFiles = allFiles.concat(cameraFiles);
         }
+        
+        console.log('📊 Total de arquivos:', allFiles.length);
         
         // Filtrar apenas imagens
         const todasFotos = allFiles.filter(f => f.type.startsWith('image/'));

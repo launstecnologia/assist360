@@ -965,7 +965,7 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                                         <p class="text-xs text-gray-400 mt-1">PNG, JPG até 10MB</p>
                                     </div>
                                     <input type="file" id="fotos" name="fotos[]" multiple accept="image/*" class="hidden" onchange="previewPhotos(this)">
-                                    <input type="file" id="fotos-camera" name="fotos[]" multiple accept="image/*" capture="environment" class="hidden" onchange="previewPhotos(this)">
+                                    <input type="file" id="fotos-camera" name="fotos[]" multiple accept="image/*" capture="environment" class="hidden">
                                     <div id="fotos-preview-container" class="mt-4 relative">
                                         <div id="fotos-preview" class="grid grid-cols-2 md:grid-cols-5 gap-4 hidden">
                                             <!-- Fotos serão inseridas aqui via JavaScript -->
@@ -2748,9 +2748,9 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
     window.escolherCamera = function() {
         const inputCamera = document.getElementById('fotos-camera');
         if (inputCamera) {
+            // Não fechar o modal imediatamente - deixar o evento change fazer isso
+            // Isso garante que a foto seja capturada antes de fechar
             inputCamera.click();
-            // Fechar modal imediatamente após clicar (o listener do change também vai fechar como backup)
-            setTimeout(() => fecharModalFoto(), 100);
         } else {
             fecharModalFoto();
         }
@@ -2828,6 +2828,11 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         
         if (inputCamera && !inputCamera.dataset.listenerAdicionado) {
             inputCamera.addEventListener('change', function(e) {
+                console.log('📷 Câmera: Arquivos selecionados:', e.target.files);
+                // Garantir que previewPhotos seja chamado explicitamente
+                if (e.target.files && e.target.files.length > 0) {
+                    previewPhotos(this);
+                }
                 fecharModalFoto(); // Fechar modal após seleção
             });
             inputCamera.dataset.listenerAdicionado = 'true';
@@ -2892,6 +2897,7 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
     let fotosArmazenadasManual = [];
     
     window.previewPhotos = function(input) {
+        console.log('🖼️ previewPhotos chamado, input:', input ? input.id : 'null');
         const preview = document.getElementById('fotos-preview');
         const loadingOverlay = document.getElementById('fotos-loading');
         const inputArquivo = document.getElementById('fotos');
@@ -2899,12 +2905,17 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         
         // Combinar arquivos de ambos os inputs
         let allFiles = [];
-        if (inputArquivo && inputArquivo.files) {
+        if (inputArquivo && inputArquivo.files && inputArquivo.files.length > 0) {
             allFiles = Array.from(inputArquivo.files);
+            console.log('📁 Arquivos do inputArquivo:', allFiles.length);
         }
-        if (inputCamera && inputCamera.files) {
-            allFiles = allFiles.concat(Array.from(inputCamera.files));
+        if (inputCamera && inputCamera.files && inputCamera.files.length > 0) {
+            const cameraFiles = Array.from(inputCamera.files);
+            console.log('📷 Arquivos do inputCamera:', cameraFiles.length);
+            allFiles = allFiles.concat(cameraFiles);
         }
+        
+        console.log('📊 Total de arquivos:', allFiles.length);
         
         // Filtrar apenas imagens
         const todasFotos = allFiles.filter(f => f.type.startsWith('image/'));
