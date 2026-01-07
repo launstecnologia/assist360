@@ -2827,33 +2827,12 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         }
         
         if (inputCamera && !inputCamera.dataset.listenerAdicionado) {
-            // Adicionar listener para o evento change
             inputCamera.addEventListener('change', function(e) {
-                console.log('📷 Câmera: Evento change disparado');
-                console.log('📷 Câmera: Arquivos selecionados:', e.target.files ? e.target.files.length : 0);
-                
-                // Garantir que previewPhotos seja chamado explicitamente
                 if (e.target.files && e.target.files.length > 0) {
-                    console.log('✅ Chamando previewPhotos para processar foto da câmera');
                     previewPhotos(this);
-                } else {
-                    console.warn('⚠️ Nenhum arquivo detectado no input da câmera');
-                }
-                
-                // Fechar modal após processar
-                setTimeout(() => {
                     fecharModalFoto();
-                }, 500); // Dar tempo para processar antes de fechar
-            });
-            
-            // Também adicionar listener via onchange como fallback
-            inputCamera.onchange = function(e) {
-                console.log('📷 Câmera: onchange inline disparado');
-                if (e.target.files && e.target.files.length > 0) {
-                    previewPhotos(this);
                 }
-            };
-            
+            });
             inputCamera.dataset.listenerAdicionado = 'true';
         }
     });
@@ -2916,55 +2895,32 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
     let fotosArmazenadasManual = [];
     
     window.previewPhotos = function(input) {
-        console.log('🖼️ previewPhotos chamado, input:', input ? input.id : 'null');
         const preview = document.getElementById('fotos-preview');
         const loadingOverlay = document.getElementById('fotos-loading');
         const inputArquivo = document.getElementById('fotos');
         const inputCamera = document.getElementById('fotos-camera');
         
-        // Combinar arquivos de ambos os inputs
+        // Usar apenas os arquivos do input que foi alterado
         let allFiles = [];
-        if (inputArquivo && inputArquivo.files && inputArquivo.files.length > 0) {
-            allFiles = Array.from(inputArquivo.files);
-            console.log('📁 Arquivos do inputArquivo:', allFiles.length);
+        if (input && input.files && input.files.length > 0) {
+            allFiles = Array.from(input.files);
         }
-        if (inputCamera && inputCamera.files && inputCamera.files.length > 0) {
-            const cameraFiles = Array.from(inputCamera.files);
-            console.log('📷 Arquivos do inputCamera:', cameraFiles.length);
-            allFiles = allFiles.concat(cameraFiles);
-        }
-        
-        console.log('📊 Total de arquivos:', allFiles.length);
         
         // Filtrar apenas imagens
         const todasFotos = allFiles.filter(f => f.type.startsWith('image/'));
-        console.log('🖼️ Fotos filtradas:', todasFotos.length);
-        console.log('📋 Fotos já armazenadas:', fotosArmazenadasManual.length);
         
         // Detectar apenas as NOVAS fotos
-        // Para fotos da câmera, usar timestamp mais preciso para evitar duplicação falsa
         const novasFotos = todasFotos.filter(novaFoto => {
-            // Verificar se esta foto já está armazenada
-            const jaExiste = fotosArmazenadasManual.some(fotoArmazenada => {
-                // Comparar por tamanho e timestamp (mais confiável que nome para câmera)
+            return !fotosArmazenadasManual.some(fotoArmazenada => {
                 const mesmoTamanho = fotoArmazenada.file.size === novaFoto.size;
                 const mesmoTimestamp = fotoArmazenada.file.lastModified === novaFoto.lastModified;
-                // Para câmera, aceitar se tamanho E timestamp forem iguais
-                // Para arquivo, também verificar nome
                 if (input === inputCamera) {
                     return mesmoTamanho && mesmoTimestamp;
                 } else {
                     return mesmoTamanho && mesmoTimestamp && fotoArmazenada.file.name === novaFoto.name;
                 }
             });
-            
-            if (!jaExiste) {
-                console.log('✅ Nova foto detectada:', novaFoto.name, novaFoto.size, 'bytes');
-            }
-            return !jaExiste;
         });
-        
-        console.log('🆕 Novas fotos para adicionar:', novasFotos.length);
         
         if (novasFotos.length > 0) {
             // Verificar limite de 5 fotos
@@ -3009,13 +2965,9 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                 }
             };
             
-            console.log('🔄 Processando', fotosParaAdicionar.length, 'foto(s)...');
-            
             fotosParaAdicionar.forEach((file, index) => {
-                // Criar ID único para a foto (usar timestamp + índice para garantir unicidade)
+                // Criar ID único para a foto
                 const fotoId = Date.now() + '_' + index + '_' + Math.random().toString(36).substr(2, 9);
-                
-                console.log('📸 Processando foto', index + 1, 'de', fotosParaAdicionar.length, '- ID:', fotoId);
                 
                 // Armazenar referência do arquivo ANTES de processar
                 fotosArmazenadasManual.push({
@@ -3026,7 +2978,6 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                 
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    console.log('✅ Foto carregada com sucesso:', fotoId);
                         // Verificar se a foto ainda existe na lista (não foi removida)
                         const fotoAindaExiste = fotosArmazenadasManual.some(f => f.id === fotoId);
                         if (!fotoAindaExiste) {
@@ -3054,14 +3005,11 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                             </button>
                         `;
                         preview.appendChild(div);
-                        console.log('🖼️ Foto adicionada ao DOM:', fotoId);
                     
                         fotosProcessadas++;
-                        console.log('📊 Progresso:', fotosProcessadas, '/', totalFotos);
                         verificarConclusao();
                     };
-                    reader.onerror = function(error) {
-                        console.error('❌ Erro ao ler foto:', fotoId, error);
+                    reader.onerror = function() {
                         // Remover da lista se houver erro
                         fotosArmazenadasManual = fotosArmazenadasManual.filter(f => f.id !== fotoId);
                         fotosProcessadas++;
@@ -3070,7 +3018,6 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                     reader.readAsDataURL(file);
             });
         } else {
-            console.log('⚠️ Nenhuma nova foto detectada');
             // Se não houver novas fotos, verificar se ainda há fotos no preview
             if (fotosArmazenadasManual.length === 0) {
                 preview.classList.add('hidden');
