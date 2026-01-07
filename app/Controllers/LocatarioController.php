@@ -3539,7 +3539,7 @@ class LocatarioController extends Controller
                     break;
                     
                 case 'comprar_pecas':
-                    // Mesma lógica do TokenController: status "Pendente", condição "Comprar peças", prazo de 10 dias
+                    // Mesma lógica do TokenController: status "Pendente Cliente", condição "Comprar peças", prazo de 10 dias
                     $condicaoModel = new \App\Models\Condicao();
                     $condicao = $condicaoModel->findByNome('Comprar peças');
                     if (!$condicao) {
@@ -3554,7 +3554,14 @@ class LocatarioController extends Controller
                     }
                     
                     $statusModel = new \App\Models\Status();
-                    $statusPendente = $statusModel->findByNome('Pendente');
+                    // Buscar "Pendente Cliente" primeiro, depois "Pendente", depois "Aguardando"
+                    $statusPendente = $statusModel->findByNome('Pendente Cliente');
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendente');
+                    }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
                     }
@@ -4093,7 +4100,7 @@ class LocatarioController extends Controller
                     break;
                     
                 case 'comprar_pecas':
-                    // Mesma lógica: status "Pendente", condição "Comprar peças", prazo de 10 dias
+                    // Mesma lógica: status "Pendente Cliente", condição "Comprar peças", prazo de 10 dias
                     $condicaoModel = new \App\Models\Condicao();
                     $condicao = $condicaoModel->findByNome('Comprar peças');
                     if (!$condicao) {
@@ -4107,7 +4114,14 @@ class LocatarioController extends Controller
                         $condicaoId = $condicao['id'];
                     }
                     
-                    $statusPendente = $statusModel->findByNome('Pendente');
+                    // Buscar "Pendente Cliente" primeiro, depois "Pendente", depois "Aguardando"
+                    $statusPendente = $statusModel->findByNome('Pendente Cliente');
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendente');
+                    }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
                     }

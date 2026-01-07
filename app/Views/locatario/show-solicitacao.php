@@ -5,6 +5,73 @@
 $title = 'Detalhes da Solicitação - Assistência 360°';
 $currentPage = 'locatario-solicitacao-detalhes';
 ob_start();
+
+// Função para processar observações e exibir imagens dos anexos
+function processarObservacoesComImagens($texto) {
+    if (empty($texto)) {
+        return '';
+    }
+    
+    // Escapar HTML primeiro
+    $texto = htmlspecialchars($texto);
+    
+    // Padrão para encontrar "Anexos: " seguido de links
+    // Exemplo: "Anexos: uploads/solicitacoes/123/anexos/anexo_123.jpg, uploads/solicitacoes/123/anexos/anexo_456.png"
+    $texto = preg_replace_callback(
+        '/(Anexos:\s*)([^\n]+)/i',
+        function($matches) {
+            $prefixo = $matches[1];
+            $anexos = trim($matches[2]);
+            
+            // Separar anexos por vírgula
+            $listaAnexos = preg_split('/,\s*/', $anexos);
+            $html = $prefixo . '<br>';
+            $html .= '<div class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3">';
+            
+            foreach ($listaAnexos as $anexo) {
+                $anexo = trim($anexo);
+                if (empty($anexo)) continue;
+                
+                // Construir URL completa
+                $urlAnexo = url('Public/' . $anexo);
+                
+                // Verificar se é imagem (extensões comuns)
+                $extensao = strtolower(pathinfo($anexo, PATHINFO_EXTENSION));
+                $ehImagem = in_array($extensao, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+                
+                if ($ehImagem) {
+                    // Exibir como imagem
+                    $nomeArquivo = htmlspecialchars(basename($anexo));
+                    $html .= '<div class="relative">';
+                    $html .= '<img src="' . htmlspecialchars($urlAnexo) . '" ';
+                    $html .= 'alt="' . $nomeArquivo . '" ';
+                    $html .= 'class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity" ';
+                    $html .= 'onclick="abrirModalFoto(\'' . htmlspecialchars($urlAnexo) . '\')" ';
+                    $html .= 'onerror="this.parentElement.style.display=\'none\';">';
+                    $html .= '</div>';
+                } else {
+                    // Exibir como link para PDF/Word
+                    $nomeArquivo = htmlspecialchars(basename($anexo));
+                    $html .= '<div class="flex items-center p-2 bg-gray-100 rounded-lg">';
+                    $html .= '<i class="fas fa-file-alt text-gray-600 mr-2"></i>';
+                    $html .= '<a href="' . htmlspecialchars($urlAnexo) . '" target="_blank" class="text-sm text-blue-600 hover:text-blue-800 truncate">';
+                    $html .= $nomeArquivo;
+                    $html .= '</a>';
+                    $html .= '</div>';
+                }
+            }
+            
+            $html .= '</div>';
+            return $html;
+        },
+        $texto
+    );
+    
+    // Converter quebras de linha para <br>
+    $texto = nl2br($texto);
+    
+    return $texto;
+}
 ?>
 
 <!-- Header -->
@@ -915,9 +982,9 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
                             </span>
                         </p>
                         <?php if (!empty($item['observacoes']) && !str_contains($item['observacoes'], 'pelo Locatário') && !str_contains($item['observacoes'], 'Locatário')): ?>
-                            <p class="text-xs text-gray-600 mt-1">
-                                <?= htmlspecialchars($item['observacoes']) ?>
-                            </p>
+                            <div class="text-xs text-gray-600 mt-1">
+                                <?= processarObservacoesComImagens($item['observacoes']) ?>
+                            </div>
                 <?php endif; ?>
             </div>
                 </div>
