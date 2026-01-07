@@ -2445,6 +2445,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Preview de fotos
     // Funções para modal de foto
     window.abrirModalFoto = function() {
+        // Verificar se já atingiu o limite de 5 fotos
+        if (fotosArmazenadas.length >= 5) {
+            alert('Você já adicionou o máximo de 5 fotos');
+            return;
+        }
+        
         const modal = document.getElementById('modal-foto');
         if (modal) {
             modal.classList.remove('hidden');
@@ -2462,19 +2468,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const inputCamera = document.getElementById('fotos-camera');
         if (inputCamera) {
             inputCamera.click();
+            // Fechar modal imediatamente após clicar (o listener do change também vai fechar como backup)
+            setTimeout(() => fecharModalFoto(), 100);
+        } else {
+            fecharModalFoto();
         }
-        fecharModalFoto();
     };
     
     window.escolherArquivo = function() {
-        console.log('📂 escolherArquivo chamado');
         const inputArquivo = document.getElementById('fotos');
         if (inputArquivo) {
-            console.log('✅ Input arquivo encontrado, clicando...');
-            // Não fechar o modal imediatamente, deixar o evento change fazer isso
             inputArquivo.click();
+            // Fechar modal imediatamente após clicar (o listener do change também vai fechar como backup)
+            setTimeout(() => fecharModalFoto(), 100);
         } else {
-            console.error('❌ Input arquivo não encontrado!');
             fecharModalFoto();
         }
     };
@@ -2484,6 +2491,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Combinar fotos armazenadas antes de enviar o formulário
     window.combinarFotosAntesEnvio = function(event) {
+        // Mostrar loading durante o envio
+        const loadingOverlay = document.getElementById('fotos-loading');
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('hidden');
+        }
+        
+        // Desabilitar botão de continuar para evitar múltiplos envios
+        const btnContinuar = document.getElementById('btn-continuar');
+        if (btnContinuar) {
+            btnContinuar.disabled = true;
+            btnContinuar.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enviando...';
+        }
+        
         const inputArquivo = document.getElementById('fotos');
         
         console.log('🔍 combinarFotosAntesEnvio - fotosArmazenadas:', fotosArmazenadas);
@@ -2526,6 +2546,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+        
+        // Inicializar estado do botão de adicionar fotos
+        atualizarBotaoAdicionarFotos();
         
         // Fechar modal quando os inputs mudarem (onchange inline já chama previewPhotos)
         const inputFotos = document.getElementById('fotos');
@@ -2592,32 +2615,20 @@ document.addEventListener('DOMContentLoaded', function() {
             
             preview.classList.remove('hidden');
             
+            // Mostrar loading imediatamente
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('hidden');
+            }
+            
             let fotosProcessadas = 0;
             const totalFotos = fotosParaAdicionar.length;
-            let loadingTimeout = null;
-            let loadingMostrado = false;
-            
-            // Mostrar loading apenas se demorar mais de 500ms
-            loadingTimeout = setTimeout(() => {
-                if (fotosProcessadas < totalFotos && loadingOverlay) {
-                    loadingOverlay.classList.remove('hidden');
-                    loadingMostrado = true;
-                    console.log('Loading mostrado (demorou mais de 500ms)');
-                }
-            }, 500);
             
             // Função para verificar se todas as fotos foram processadas
             const verificarConclusao = function() {
                 if (fotosProcessadas === totalFotos) {
-                    // Cancelar timeout se ainda não foi executado
-                    if (loadingTimeout) {
-                        clearTimeout(loadingTimeout);
-                    }
-                    
-                    // Esconder loading se foi mostrado
-                    if (loadingMostrado && loadingOverlay) {
+                    // Esconder loading
+                    if (loadingOverlay) {
                         loadingOverlay.classList.add('hidden');
-                        console.log('Loading escondido');
                     }
                     
                     // Limpar inputs após processar para permitir adicionar mais fotos
@@ -2627,6 +2638,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (input === inputCamera && inputCamera) {
                         inputCamera.value = '';
                     }
+                    
+                    // Atualizar estado do botão de adicionar fotos
+                    atualizarBotaoAdicionarFotos();
                 }
             };
             
@@ -2643,26 +2657,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                     const reader = new FileReader();
                     reader.onload = function(e) {
+                        // Verificar se a foto ainda existe na lista (não foi removida)
+                        const fotoAindaExiste = fotosArmazenadas.some(f => f.id === fotoId);
+                        if (!fotoAindaExiste) {
+                            fotosProcessadas++;
+                            verificarConclusao();
+                            return;
+                        }
+                        
+                        // Verificar se já não existe no DOM (evitar duplicação)
+                        const fotoExisteDOM = document.querySelector(`[data-foto-id="${fotoId}"]`);
+                        if (fotoExisteDOM) {
+                            fotosProcessadas++;
+                            verificarConclusao();
+                            return;
+                        }
+                        
                         const div = document.createElement('div');
                         div.className = 'relative';
-                    div.setAttribute('data-foto-id', fotoId);
+                        div.setAttribute('data-foto-id', fotoId);
                         div.innerHTML = `
                             <img src="${e.target.result}" class="w-full h-24 object-cover rounded-lg border border-gray-200">
-                        <button type="button" onclick="removePhoto('${fotoId}')" 
-                                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
+                            <button type="button" onclick="removePhoto('${fotoId}')" 
+                                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 z-10">
                                 ×
                             </button>
                         `;
                         preview.appendChild(div);
                     
-                    fotosProcessadas++;
-                    verificarConclusao();
-                };
-                reader.onerror = function() {
-                    // Remover da lista se houver erro
-                    fotosArmazenadas = fotosArmazenadas.filter(f => f.id !== fotoId);
-                    fotosProcessadas++;
-                    verificarConclusao();
+                        fotosProcessadas++;
+                        verificarConclusao();
+                    };
+                    reader.onerror = function() {
+                        // Remover da lista se houver erro
+                        fotosArmazenadas = fotosArmazenadas.filter(f => f.id !== fotoId);
+                        fotosProcessadas++;
+                        verificarConclusao();
                     };
                     reader.readAsDataURL(file);
             });
@@ -2678,27 +2708,17 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     window.removePhoto = function(fotoId) {
-        // Remover da lista de fotos armazenadas
+        // Verificar se a foto existe na lista antes de remover
         const fotoIndex = fotosArmazenadas.findIndex(f => f.id === fotoId);
         if (fotoIndex === -1) return;
         
+        // Remover da lista de fotos armazenadas
         fotosArmazenadas.splice(fotoIndex, 1);
         
-        // Remover do DOM
+        // Remover do DOM - usar querySelector para pegar apenas o primeiro elemento (evitar duplicação)
         const fotoElement = document.querySelector(`[data-foto-id="${fotoId}"]`);
-        if (fotoElement) {
+        if (fotoElement && fotoElement.parentNode) {
             fotoElement.remove();
-        }
-        
-        // Atualizar os inputs de arquivo (limpar para permitir adicionar novas)
-        const input = document.getElementById('fotos');
-        const inputCamera = document.getElementById('fotos-camera');
-        
-        if (input) {
-            input.value = '';
-        }
-        if (inputCamera) {
-            inputCamera.value = '';
         }
         
         // Se não houver mais fotos, esconder preview
@@ -2708,7 +2728,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 preview.classList.add('hidden');
             }
         }
+        
+        // Atualizar estado do botão de adicionar fotos
+        atualizarBotaoAdicionarFotos();
     };
+    
+    // Função para atualizar estado do botão de adicionar fotos
+    function atualizarBotaoAdicionarFotos() {
+        const botaoAdicionar = document.querySelector('div[onclick="abrirModalFoto()"]');
+        if (!botaoAdicionar) return;
+        
+        if (fotosArmazenadas.length >= 5) {
+            // Desabilitar botão - atingiu limite
+            botaoAdicionar.style.opacity = '0.5';
+            botaoAdicionar.style.cursor = 'not-allowed';
+            botaoAdicionar.style.pointerEvents = 'none';
+            botaoAdicionar.onclick = null;
+        } else {
+            // Habilitar botão
+            botaoAdicionar.style.opacity = '1';
+            botaoAdicionar.style.cursor = 'pointer';
+            botaoAdicionar.style.pointerEvents = 'auto';
+            botaoAdicionar.onclick = abrirModalFoto;
+        }
+    }
     
     // Sistema de agendamento para emergencial
     const tipoAtendimentoRadios = document.querySelectorAll('.tipo-atendimento-radio');
