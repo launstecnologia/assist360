@@ -43,3 +43,4 @@ SHOW VARIABLES LIKE 'interactive_timeout';
 -- SET GLOBAL wait_timeout = 300;  -- 5 minutos
 -- SET GLOBAL interactive_timeout = 300;  -- 5 minutos
 
+
