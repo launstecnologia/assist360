@@ -2724,6 +2724,9 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         });
     });
     
+    // Armazenar referências dos arquivos
+    let fotosArmazenadasManual = [];
+
     /**
      * Módulo para captura de fotos pelo celular
      * Gerencia upload de fotos via câmera do dispositivo ou seleção de arquivos
@@ -2739,48 +2742,7 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
             this.maxSize = options.maxSize || 10 * 1024 * 1024; // 10MB padrão
             this.fotosArmazenadas = options.fotosArmazenadas || [];
             
-            this.init();
-        }
-
-        init() {
-            // Fechar modal ao clicar fora
-            document.addEventListener('DOMContentLoaded', () => {
-                const modal = document.getElementById(this.modalId);
-                if (modal) {
-                    modal.addEventListener('click', (e) => {
-                        if (e.target === modal) {
-                            this.fecharModal();
-                        }
-                    });
-                }
-                
-                // Adicionar listeners nos inputs
-                const inputFotos = document.getElementById(this.inputFileId);
-                const inputCamera = document.getElementById(this.inputCameraId);
-                
-                if (inputFotos && !inputFotos.dataset.listenerAdicionado) {
-                    inputFotos.addEventListener('change', (e) => {
-                        this.previewPhotos(e.target);
-                        this.fecharModal();
-                    });
-                    inputFotos.dataset.listenerAdicionado = 'true';
-                }
-                
-                if (inputCamera && !inputCamera.dataset.listenerAdicionado) {
-                    inputCamera.addEventListener('change', (e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                            this.previewPhotos(e.target);
-                            this.fecharModal();
-                        }
-                    });
-                    inputCamera.dataset.listenerAdicionado = 'true';
-                }
-                
-                // Inicializar estado do botão
-                this.atualizarBotaoAdicionarFotos();
-            });
-
-            // Tornar métodos disponíveis globalmente
+            // Tornar métodos disponíveis globalmente IMEDIATAMENTE
             window.abrirModalFoto = () => this.abrirModal();
             window.fecharModalFoto = () => this.fecharModal();
             window.escolherCamera = () => this.escolherCamera();
@@ -2788,6 +2750,53 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
             window.previewPhotos = (input) => this.previewPhotos(input);
             window.removePhoto = (fotoId) => this.removePhoto(fotoId);
             window.combinarFotosAntesEnvio = (event) => this.combinarFotosAntesEnvio(event);
+            
+            this.init();
+        }
+
+        init() {
+            // Fechar modal ao clicar fora
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => this.setupListeners());
+            } else {
+                this.setupListeners();
+            }
+        }
+        
+        setupListeners() {
+            const modal = document.getElementById(this.modalId);
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        this.fecharModal();
+                    }
+                });
+            }
+            
+            // Adicionar listeners nos inputs
+            const inputFotos = document.getElementById(this.inputFileId);
+            const inputCamera = document.getElementById(this.inputCameraId);
+            
+            if (inputFotos && !inputFotos.dataset.listenerAdicionado) {
+                inputFotos.addEventListener('change', (e) => {
+                    this.previewPhotos(e.target);
+                    this.fecharModal();
+                });
+                inputFotos.dataset.listenerAdicionado = 'true';
+            }
+            
+            if (inputCamera && !inputCamera.dataset.listenerAdicionado) {
+                inputCamera.addEventListener('change', (e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                        this.previewPhotos(e.target);
+                        this.fecharModal();
+                    }
+                });
+                inputCamera.dataset.listenerAdicionado = 'true';
+            }
+            
+            // Inicializar estado do botão
+            this.atualizarBotaoAdicionarFotos();
         }
 
         /**
@@ -3047,11 +3056,24 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         }
     }
 
-    // Armazenar referências dos arquivos
-    let fotosArmazenadasManual = [];
-
     // Inicializar quando o DOM estiver pronto
-    document.addEventListener('DOMContentLoaded', function() {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('fotos') || document.getElementById('fotos-camera')) {
+                window.cameraUpload = new CameraUpload({
+                    inputFileId: 'fotos',
+                    inputCameraId: 'fotos-camera',
+                    previewId: 'fotos-preview',
+                    modalId: 'modal-foto',
+                    loadingId: 'fotos-loading',
+                    maxFiles: 5,
+                    maxSize: 10 * 1024 * 1024,
+                    fotosArmazenadas: fotosArmazenadasManual
+                });
+            }
+        });
+    } else {
+        // DOM já está pronto, inicializar imediatamente
         if (document.getElementById('fotos') || document.getElementById('fotos-camera')) {
             window.cameraUpload = new CameraUpload({
                 inputFileId: 'fotos',
@@ -3064,7 +3086,7 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                 fotosArmazenadas: fotosArmazenadasManual
             });
         }
-    });
+    }
     
     // Função para toggle do resumo das etapas
     function toggleResumoEtapas() {
