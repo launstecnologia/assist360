@@ -1861,11 +1861,15 @@ function renderizarDetalhes(solicitacao) {
                 <h4 class="text-sm font-medium text-gray-700 mb-3">
                     <i class="fas fa-camera mr-2 text-gray-400"></i>
                     Fotos Enviadas
-                    <span class="text-xs text-gray-500" id="fotos-count">(${solicitacao.fotos && Array.isArray(solicitacao.fotos) ? solicitacao.fotos.length : 0})</span>
+                    <span class="text-xs text-gray-500" id="fotos-count">(${
+                        (solicitacao.fotos && Array.isArray(solicitacao.fotos) ? solicitacao.fotos.length : 0) + 
+                        (solicitacao.anexos && Array.isArray(solicitacao.anexos) ? solicitacao.anexos.filter(a => a.is_image).length : 0)
+                    })</span>
                 </h4>
-                ${solicitacao.fotos && Array.isArray(solicitacao.fotos) && solicitacao.fotos.length > 0 ? `
+                ${((solicitacao.fotos && Array.isArray(solicitacao.fotos) && solicitacao.fotos.length > 0) || 
+                   (solicitacao.anexos && Array.isArray(solicitacao.anexos) && solicitacao.anexos.filter(a => a.is_image).length > 0)) ? `
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    ${solicitacao.fotos.map((foto, index) => {
+                    ${(solicitacao.fotos || []).map((foto, index) => {
                         let urlFoto = '';
                         const nomeArquivo = foto.nome_arquivo || (foto.url_arquivo ? foto.url_arquivo.split('/').pop() : '');
                         if (nomeArquivo) {
@@ -1873,7 +1877,6 @@ function renderizarDetalhes(solicitacao) {
                         } else {
                             return '';
                         }
-                        // Usar data attributes e event delegation ao invés de onclick inline
                         const fotoId = 'foto-' + solicitacao.id + '-' + index;
                         const urlFotoEscapada = urlFoto.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         const nomeArquivoEscapado = nomeArquivo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -1892,6 +1895,27 @@ function renderizarDetalhes(solicitacao) {
                             </div>
                         `;
                     }).join('')}
+                    ${(solicitacao.anexos || []).filter(a => a.is_image).map((anexo, index) => {
+                        const urlAnexo = '<?= url("Public/") ?>' + anexo.url;
+                        const urlAnexoEscapada = urlAnexo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const nomeArquivoEscapado = anexo.nome_arquivo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `
+                            <div class="relative group foto-container" 
+                                 data-foto-url="${urlAnexoEscapada}"
+                                 data-foto-nome="${nomeArquivoEscapado}">
+                                <img src="${urlAnexoEscapada}" 
+                                     alt="Anexo ${index + 1}" 
+                                     class="w-full h-32 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity shadow-sm"
+                                     onerror="this.parentElement.innerHTML='<div class=\\'w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs\\'><i class=\\'fas fa-image mr-2\\'></i>Erro</div>';">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all flex items-center justify-center pointer-events-none">
+                                    <i class="fas fa-search-plus text-white opacity-0 group-hover:opacity-100 transition-opacity text-2xl"></i>
+                                </div>
+                                <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b-lg truncate">
+                                    <i class="fas fa-paperclip mr-1"></i>Anexo
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
                 ` : `
                 <div class="text-center py-8 text-gray-400">
@@ -1900,6 +1924,31 @@ function renderizarDetalhes(solicitacao) {
                 </div>
                 `}
             </div>
+            
+            <!-- Outros Anexos (não imagens) -->
+            ${(solicitacao.anexos && Array.isArray(solicitacao.anexos) && solicitacao.anexos.filter(a => !a.is_image).length > 0) ? `
+            <div class="mt-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">
+                    <i class="fas fa-paperclip mr-2 text-gray-400"></i>
+                    Outros Anexos (${solicitacao.anexos.filter(a => !a.is_image).length})
+                </h4>
+                <div class="space-y-2">
+                    ${solicitacao.anexos.filter(a => !a.is_image).map(anexo => {
+                        const urlAnexo = '<?= url("Public/") ?>' + anexo.url;
+                        const iconClass = anexo.extension === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-file-alt text-blue-500';
+                        return `
+                            <a href="${urlAnexo}" 
+                               target="_blank" 
+                               class="flex items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                <i class="fas ${iconClass} mr-2"></i>
+                                <span class="text-sm text-gray-700 truncate">${anexo.nome_arquivo}</span>
+                                <i class="fas fa-external-link-alt ml-auto text-gray-400 text-xs"></i>
+                            </a>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            ` : ``}
         </div>
         
         <!-- Bloco 3: Disponibilidade de Data, Status da Solicitação, Condições, Protocolo da Seguradora -->
@@ -4456,6 +4505,278 @@ document.addEventListener('change', function(e) {
         } else {
             if (!intervaloAtualizacao && colunaNovaSolicitacao) {
                 intervaloAtualizacao = setInterval(buscarNovasSolicitacoes, 3000);
+            }
+        }
+    });
+})();
+
+// ============================================
+// ATUALIZAÇÃO AUTOMÁTICA DE CARDS EXISTENTES
+// ============================================
+(function() {
+    'use strict';
+    
+    let intervaloAtualizacaoCards = null;
+    let ultimaVerificacao = Date.now();
+    let cardsRastreados = new Map(); // Map<id, {statusId, updatedAt}>
+    
+    // Função para coletar informações dos cards existentes
+    function coletarInfoCards() {
+        cardsRastreados.clear();
+        const cards = document.querySelectorAll('.kanban-card[data-solicitacao-id]');
+        cards.forEach(card => {
+            const id = parseInt(card.getAttribute('data-solicitacao-id'));
+            const statusId = parseInt(card.getAttribute('data-status-id'));
+            if (id && statusId) {
+                cardsRastreados.set(id, {
+                    statusId: statusId,
+                    cardElement: card
+                });
+            }
+        });
+    }
+    
+    // Função para encontrar a coluna por status_id
+    function encontrarColunaPorStatusId(statusId) {
+        const colunas = document.querySelectorAll('.kanban-column');
+        for (let coluna of colunas) {
+            const cardsContainer = coluna.querySelector('.kanban-cards');
+            if (cardsContainer) {
+                const colunaStatusId = parseInt(cardsContainer.getAttribute('data-status-id'));
+                if (colunaStatusId === statusId) {
+                    return coluna;
+                }
+            }
+        }
+        return null;
+    }
+    
+    // Função para mover card para o topo da coluna
+    function moverCardParaTopo(card, coluna) {
+        const cardsContainer = coluna.querySelector('.kanban-cards');
+        if (!cardsContainer) return;
+        
+        // Remover mensagem "Nenhuma solicitação" se existir
+        const mensagemVazia = cardsContainer.querySelector('.text-center.py-8');
+        if (mensagemVazia) {
+            mensagemVazia.remove();
+        }
+        
+        // Remover card da posição atual
+        card.remove();
+        
+        // Adicionar no topo
+        if (cardsContainer.firstChild) {
+            cardsContainer.insertBefore(card, cardsContainer.firstChild);
+        } else {
+            cardsContainer.appendChild(card);
+        }
+        
+        // Adicionar animação
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.3s ease-in-out';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, 10);
+    }
+    
+    // Função para atualizar card existente (quando status não mudou, apenas move para topo)
+    function atualizarCardExistente(solicitacao, cardExistente) {
+        const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
+        const statusIdNovo = parseInt(solicitacao.status_id);
+        
+        // Se mudou de status, mover para nova coluna
+        if (statusIdAtual !== statusIdNovo) {
+            const novaColuna = encontrarColunaPorStatusId(statusIdNovo);
+            if (novaColuna) {
+                // Atualizar atributos do card
+                cardExistente.setAttribute('data-status-id', statusIdNovo);
+                
+                // Atualizar cor da borda
+                const statusCor = solicitacao.status_cor || '#3B82F6';
+                cardExistente.style.borderColor = statusCor;
+                
+                // Mover para nova coluna
+                moverCardParaTopo(cardExistente, novaColuna);
+                
+                // Atualizar contadores
+                atualizarContadores();
+                
+                console.log(`🔄 Card #${solicitacao.id} movido de status ${statusIdAtual} para ${statusIdNovo} ("${solicitacao.status_nome}")`);
+            } else {
+                console.warn(`⚠️ Coluna não encontrada para status_id ${statusIdNovo} (card #${solicitacao.id})`);
+            }
+        } else {
+            // Mesmo status, apenas mover para topo (card foi atualizado)
+            const colunaAtual = cardExistente.closest('.kanban-column');
+            if (colunaAtual) {
+                moverCardParaTopo(cardExistente, colunaAtual);
+                console.log(`⬆️ Card #${solicitacao.id} movido para o topo da coluna "${solicitacao.status_nome}"`);
+            }
+        }
+    }
+    
+    // Função para atualizar contadores das colunas
+    function atualizarContadores() {
+        const colunas = document.querySelectorAll('.kanban-column');
+        colunas.forEach(coluna => {
+            const cardsContainer = coluna.querySelector('.kanban-cards');
+            const contador = coluna.querySelector('.bg-gray-200');
+            if (cardsContainer && contador) {
+                const totalCards = cardsContainer.querySelectorAll('.kanban-card').length;
+                contador.textContent = totalCards;
+            }
+        });
+    }
+    
+    // Função para buscar solicitações atualizadas
+    function buscarSolicitacoesAtualizadas() {
+        // Se a rota já foi desabilitada (404 anterior), não tentar novamente
+        if (window.rotaAtualizacaoDesabilitada) {
+            return;
+        }
+        
+        const imobiliariaId = new URLSearchParams(window.location.search).get('imobiliaria_id') || '';
+        // Aumentar para 10 segundos para garantir que capture todas as atualizações
+        const url = `<?= url('admin/kanban/solicitacoes-atualizadas') ?>?ultimos_segundos=10${imobiliariaId ? '&imobiliaria_id=' + imobiliariaId : ''}`;
+        
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            // Verificar se a resposta é OK
+            if (!response.ok) {
+                // Se for 404, a rota não existe - desabilitar polling silenciosamente
+                if (response.status === 404) {
+                    if (!window.rotaAtualizacaoDesabilitada) {
+                        console.warn('⚠️ Rota de atualização automática não encontrada. Funcionalidade desabilitada.');
+                        window.rotaAtualizacaoDesabilitada = true;
+                        // Parar o polling
+                        if (intervaloAtualizacaoCards) {
+                            clearInterval(intervaloAtualizacaoCards);
+                            intervaloAtualizacaoCards = null;
+                        }
+                    }
+                    return null; // Retornar null para não processar
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Verificar se o content-type é JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Resposta não é JSON');
+            }
+            
+            return response.json();
+        })
+        .then(data => {
+            // Se data é null (rota não existe), não processar
+            if (!data) {
+                return;
+            }
+            
+            // Verificar se há erro na resposta
+            if (!data.success) {
+                console.warn('⚠️ Endpoint retornou success=false:', data.error || data.message);
+                return;
+            }
+            
+            if (data.solicitacoes && data.solicitacoes.length > 0) {
+                // Coletar info dos cards atuais ANTES de processar
+                const cardsAntes = new Map();
+                document.querySelectorAll('.kanban-card[data-solicitacao-id]').forEach(card => {
+                    const id = parseInt(card.getAttribute('data-solicitacao-id'));
+                    const statusId = parseInt(card.getAttribute('data-status-id'));
+                    if (id && statusId) {
+                        cardsAntes.set(id, {
+                            statusId: statusId,
+                            coluna: card.closest('.kanban-column')
+                        });
+                    }
+                });
+                
+                // Processar cada solicitação atualizada
+                data.solicitacoes.forEach(solicitacao => {
+                    const cardId = `kanban-card-${solicitacao.id}`;
+                    const cardExistente = document.getElementById(cardId);
+                    const statusIdNovo = parseInt(solicitacao.status_id);
+                    
+                    if (cardExistente) {
+                        const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
+                        const infoAntes = cardsAntes.get(solicitacao.id);
+                        
+                        // Se mudou de status OU se não temos informação anterior, atualizar
+                        if (statusIdAtual !== statusIdNovo || !infoAntes) {
+                            console.log(`🔄 Detectada mudança no card #${solicitacao.id}: Status ${statusIdAtual} → ${statusIdNovo}`);
+                            atualizarCardExistente(solicitacao, cardExistente);
+                        } else {
+                            // Mesmo status, apenas mover para topo se foi atualizado recentemente
+                            const colunaAtual = cardExistente.closest('.kanban-column');
+                            if (colunaAtual) {
+                                moverCardParaTopo(cardExistente, colunaAtual);
+                            }
+                        }
+                    }
+                    // Se o card não existe, ele será adicionado pela funcionalidade de "novas solicitações"
+                });
+            }
+        })
+        .catch(error => {
+            // Só logar erros que não sejam 404 (rota não existe)
+            if (!window.rotaAtualizacaoDesabilitada) {
+                // Verificar se é erro de parsing JSON (provavelmente 404 retornando HTML)
+                if (error.message && error.message.includes('JSON')) {
+                    console.warn('⚠️ Rota de atualização automática não encontrada. Funcionalidade desabilitada.');
+                    window.rotaAtualizacaoDesabilitada = true;
+                    // Parar o polling
+                    if (intervaloAtualizacaoCards) {
+                        clearInterval(intervaloAtualizacaoCards);
+                        intervaloAtualizacaoCards = null;
+                    }
+                } else {
+                    // Outros erros - logar apenas uma vez por minuto
+                    if (!window.lastErrorLog || Date.now() - window.lastErrorLog > 60000) {
+                        console.error('❌ Erro ao buscar solicitações atualizadas:', error.message);
+                        window.lastErrorLog = Date.now();
+                    }
+                }
+            }
+        });
+    }
+    
+    // Inicializar quando a página carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        // Coletar informações iniciais dos cards
+        coletarInfoCards();
+        
+        // Iniciar polling a cada 3 segundos (mais frequente para detectar mudanças rapidamente)
+        intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+        
+        // Fazer uma busca imediata ao carregar
+        buscarSolicitacoesAtualizadas();
+        
+        console.log('✅ Atualização automática de cards do Kanban ativada (a cada 3 segundos)');
+    });
+    
+    // Parar polling quando a página for escondida (otimização)
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (intervaloAtualizacaoCards) {
+                clearInterval(intervaloAtualizacaoCards);
+                intervaloAtualizacaoCards = null;
+            }
+        } else {
+            if (!intervaloAtualizacaoCards) {
+                intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+                // Fazer busca imediata ao voltar para a página
+                buscarSolicitacoesAtualizadas();
             }
         }
     });

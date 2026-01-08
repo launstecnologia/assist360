@@ -1180,7 +1180,7 @@ class LocatarioController extends Controller
         
         // Criar solicitação
         try {
-            $solicitacaoId = $this->solicitacaoModel->create($data);
+        $solicitacaoId = $this->solicitacaoModel->create($data);
             
             if (!$solicitacaoId || $solicitacaoId <= 0) {
                 error_log("ERRO [finalizarSolicitacao] - create() retornou ID inválido: " . $solicitacaoId);
@@ -1340,6 +1340,9 @@ class LocatarioController extends Controller
             $fotos = [];
         }
         
+        // Buscar anexos da pasta de anexos (comprar peças, etc.)
+        $anexos = $this->buscarAnexosSolicitacao($id);
+        
         // Buscar histórico de status (linha do tempo)
         try {
             $historicoStatus = $this->solicitacaoModel->getHistoricoStatus($id);
@@ -1361,6 +1364,7 @@ class LocatarioController extends Controller
             'locatario' => $locatario,
             'solicitacao' => $solicitacao,
             'fotos' => $fotos,
+            'anexos' => $anexos,
             'historicoStatus' => $historicoStatus,
             'whatsappHistorico' => $whatsappHistorico
         ]);
@@ -2577,7 +2581,7 @@ class LocatarioController extends Controller
                 ];
                 
                 try {
-                    $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
                     
                     if (!$solicitacaoId || $solicitacaoId <= 0) {
                         error_log("ERRO [finalizarSolicitacaoManual - múltiplas categorias] - create() retornou ID inválido: " . $solicitacaoId);
@@ -2728,8 +2732,8 @@ class LocatarioController extends Controller
             
             // Criar solicitação normal
             try {
-                $solicitacaoModel = new \App\Models\Solicitacao();
-                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+            $solicitacaoModel = new \App\Models\Solicitacao();
+            $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
                 
                 if (!$solicitacaoId || $solicitacaoId <= 0) {
                     error_log("ERRO [finalizarSolicitacaoManual] - create() retornou ID inválido: " . $solicitacaoId);
@@ -2737,17 +2741,17 @@ class LocatarioController extends Controller
                     $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação. Tente novamente.')));
                     return;
                 }
-                
-                // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
-                if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
-                    // Verificar se precisa atualizar
-                    $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
-                    if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
-                        if (empty($solicitacaoCriada['tipo_qualificacao'])) {
-                            \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
-                            error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
-                        }
+            
+            // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
+            if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
+                // Verificar se precisa atualizar
+                $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
+                if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
+                    if (empty($solicitacaoCriada['tipo_qualificacao'])) {
+                        \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
+                        error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
                     }
+                }
                 }
             } catch (\Exception $e) {
                 error_log("ERRO [finalizarSolicitacaoManual] ao criar solicitação: " . $e->getMessage());
@@ -2970,7 +2974,7 @@ class LocatarioController extends Controller
                     
                     // Criar solicitação manual
                     try {
-                        $id = $solicitacaoManualModel->create($dadosParaSalvar);
+                    $id = $solicitacaoManualModel->create($dadosParaSalvar);
                         
                         if (!$id || $id <= 0) {
                             error_log("ERRO [finalizarSolicitacaoManual - solicitação manual] - create() retornou ID inválido: " . $id);
@@ -3643,7 +3647,7 @@ class LocatarioController extends Controller
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                        $statusPendente = $statusModel->findByNome('Pendente');
+                    $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
@@ -3878,6 +3882,38 @@ class LocatarioController extends Controller
             error_log('Erro ao executar ação [LocatarioController]: ' . $e->getMessage());
             $this->json(['success' => false, 'message' => 'Erro ao executar ação: ' . $e->getMessage()], 500);
         }
+    }
+    
+    /**
+     * Buscar anexos da pasta de anexos da solicitação (comprar peças, etc.)
+     */
+    private function buscarAnexosSolicitacao(int $solicitacaoId): array
+    {
+        $anexos = [];
+        $anexosDir = __DIR__ . '/../../Public/uploads/solicitacoes/' . $solicitacaoId . '/anexos/';
+        
+        if (is_dir($anexosDir)) {
+            $arquivos = scandir($anexosDir);
+            $extensoesImagem = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            
+            foreach ($arquivos as $arquivo) {
+                if ($arquivo === '.' || $arquivo === '..') {
+                    continue;
+                }
+                
+                $extension = strtolower(pathinfo($arquivo, PATHINFO_EXTENSION));
+                $isImage = in_array($extension, $extensoesImagem);
+                
+                $anexos[] = [
+                    'nome_arquivo' => $arquivo,
+                    'url' => 'uploads/solicitacoes/' . $solicitacaoId . '/anexos/' . $arquivo,
+                    'is_image' => $isImage,
+                    'extension' => $extension
+                ];
+            }
+        }
+        
+        return $anexos;
     }
     
     /**
@@ -4234,7 +4270,7 @@ class LocatarioController extends Controller
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                        $statusPendente = $statusModel->findByNome('Pendente');
+                    $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
@@ -4554,6 +4590,9 @@ class LocatarioController extends Controller
             $fotos = [];
         }
         
+        // Buscar anexos da pasta de anexos (comprar peças, etc.)
+        $anexos = $this->buscarAnexosSolicitacao($result['id']);
+        
         // Buscar histórico de status
         try {
             $historicoStatus = $solicitacaoModel->getHistoricoStatus($result['id']);
@@ -4577,6 +4616,7 @@ class LocatarioController extends Controller
             'solicitacao' => $solicitacao,
             'imobiliaria' => $imobiliaria,
             'fotos' => $fotos,
+            'anexos' => $anexos,
             'historicoStatus' => $historicoStatus,
             'token' => $token
         ]);

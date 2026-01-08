@@ -362,6 +362,71 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * Endpoint AJAX para buscar solicitações atualizadas recentemente
+     * Retorna solicitações que foram atualizadas nos últimos segundos
+     * Usado para atualizar automaticamente o Kanban quando status muda ou há interações
+     */
+    public function solicitacoesAtualizadas(): void
+    {
+        $this->requireAuth();
+        
+        $imobiliariaId = $this->input('imobiliaria_id');
+        $ultimosSegundos = (int)($this->input('ultimos_segundos') ?? 5); // Padrão: últimos 5 segundos
+        
+        // Buscar solicitações atualizadas recentemente
+        $sql = "
+            SELECT 
+                s.*,
+                c.nome as categoria_nome,
+                sc.nome as subcategoria_nome,
+                sc.is_emergencial as subcategoria_is_emergencial,
+                i.nome as imobiliaria_nome,
+                i.logo as imobiliaria_logo,
+                st.nome as status_nome,
+                st.cor as status_cor,
+                cond.nome as condicao_nome,
+                cond.cor as condicao_cor,
+                wi.id as whatsapp_instance_id,
+                wi.nome as whatsapp_instance_nome,
+                wi.status as whatsapp_instance_status,
+                s.chat_atendimento_ativo
+            FROM solicitacoes s
+            LEFT JOIN categorias c ON s.categoria_id = c.id
+            LEFT JOIN subcategorias sc ON s.subcategoria_id = sc.id
+            LEFT JOIN imobiliarias i ON s.imobiliaria_id = i.id
+            LEFT JOIN status st ON s.status_id = st.id
+            LEFT JOIN condicoes cond ON s.condicao_id = cond.id
+            LEFT JOIN whatsapp_instances wi ON s.chat_whatsapp_instance_id = wi.id
+            WHERE s.updated_at >= DATE_SUB(NOW(), INTERVAL ? SECOND)
+        ";
+        
+        $params = [$ultimosSegundos];
+        
+        // Aplicar filtro de imobiliárias permitidas para operadores
+        $filtroImobiliarias = $this->getFiltroImobiliariasPermitidas('s');
+        if (!empty($filtroImobiliarias['condition'])) {
+            $sql .= " AND " . $filtroImobiliarias['condition'];
+            $params = array_merge($params, $filtroImobiliarias['params']);
+        }
+        
+        if ($imobiliariaId) {
+            $sql .= " AND s.imobiliaria_id = ?";
+            $params[] = $imobiliariaId;
+        }
+        
+        $sql .= " ORDER BY s.updated_at DESC LIMIT 100";
+        
+        $solicitacoes = \App\Core\Database::fetchAll($sql, $params);
+        
+        $this->json([
+            'success' => true,
+            'solicitacoes' => $solicitacoes,
+            'count' => count($solicitacoes),
+            'timestamp' => time()
+        ]);
+    }
+
     public function atualizarCondicao(): void
     {
         if (!$this->isPost()) {
