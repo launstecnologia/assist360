@@ -4584,6 +4584,11 @@ document.addEventListener('change', function(e) {
     
     // Função para buscar solicitações atualizadas
     function buscarSolicitacoesAtualizadas() {
+        // Se a rota já foi desabilitada (404 anterior), não tentar novamente
+        if (window.rotaAtualizacaoDesabilitada) {
+            return;
+        }
+        
         const imobiliariaId = new URLSearchParams(window.location.search).get('imobiliaria_id') || '';
         // Aumentar para 10 segundos para garantir que capture todas as atualizações
         const url = `<?= url('admin/kanban/solicitacoes-atualizadas') ?>?ultimos_segundos=10${imobiliariaId ? '&imobiliaria_id=' + imobiliariaId : ''}`;
