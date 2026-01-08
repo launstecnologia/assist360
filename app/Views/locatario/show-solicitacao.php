@@ -859,14 +859,19 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
     </div>
     
     <!-- Fotos Enviadas -->
-    <?php if (!empty($fotos) && count($fotos) > 0): ?>
+    <?php 
+        // Contar anexos que são imagens
+        $anexosImagem = isset($anexos) ? array_filter($anexos, fn($a) => $a['is_image']) : [];
+        $totalFotos = count($fotos ?? []) + count($anexosImagem);
+    ?>
+    <?php if ($totalFotos > 0): ?>
     <div class="mt-6">
         <h4 class="text-sm font-medium text-gray-700 mb-3">
             <i class="fas fa-camera mr-2 text-gray-400"></i>
-            Fotos Enviadas (<?= count($fotos) ?>)
+            Fotos Enviadas (<?= $totalFotos ?>)
         </h4>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <?php foreach ($fotos as $foto): ?>
+            <?php foreach (($fotos ?? []) as $foto): ?>
             <?php 
                 // Usar nome_arquivo se existir, caso contrário tentar url_arquivo
                 $nomeArquivo = $foto['nome_arquivo'] ?? null;
@@ -891,6 +896,20 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
                      onerror="console.error('Erro ao carregar foto: <?= htmlspecialchars($nomeArquivo) ?>'); this.parentElement.style.display='none';">
             </div>
             <?php endforeach; ?>
+            
+            <?php // Exibir anexos que são imagens (comprar peças, etc.) ?>
+            <?php foreach ($anexosImagem as $anexo): ?>
+            <?php $urlAnexo = url('Public/' . htmlspecialchars($anexo['url'])); ?>
+            <div class="relative group">
+                <img src="<?= $urlAnexo ?>" 
+                     alt="Anexo da solicitação" 
+                     class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
+                     onclick="abrirModalFoto('<?= $urlAnexo ?>')">
+                <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b-lg truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i class="fas fa-paperclip mr-1"></i>Anexo
+                </div>
+            </div>
+            <?php endforeach; ?>
         </div>
     </div>
     <?php else: ?>
@@ -900,6 +919,28 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
             Fotos Enviadas (0)
         </h4>
         <p class="text-sm text-gray-500">Nenhuma foto foi enviada</p>
+    </div>
+    <?php endif; ?>
+    
+    <?php // Exibir anexos que NÃO são imagens (PDFs, DOCs, etc.) ?>
+    <?php $anexosNaoImagem = isset($anexos) ? array_filter($anexos, fn($a) => !$a['is_image']) : []; ?>
+    <?php if (count($anexosNaoImagem) > 0): ?>
+    <div class="mt-4">
+        <h4 class="text-sm font-medium text-gray-700 mb-3">
+            <i class="fas fa-paperclip mr-2 text-gray-400"></i>
+            Outros Anexos (<?= count($anexosNaoImagem) ?>)
+        </h4>
+        <div class="space-y-2">
+            <?php foreach ($anexosNaoImagem as $anexo): ?>
+            <a href="<?= url('Public/' . htmlspecialchars($anexo['url'])) ?>" 
+               target="_blank" 
+               class="flex items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <i class="fas fa-file-<?= $anexo['extension'] === 'pdf' ? 'pdf text-red-500' : 'alt text-blue-500' ?> mr-2"></i>
+                <span class="text-sm text-gray-700 truncate"><?= htmlspecialchars($anexo['nome_arquivo']) ?></span>
+                <i class="fas fa-external-link-alt ml-auto text-gray-400 text-xs"></i>
+            </a>
+            <?php endforeach; ?>
+        </div>
     </div>
     <?php endif; ?>
 </div>

@@ -1340,6 +1340,9 @@ class LocatarioController extends Controller
             $fotos = [];
         }
         
+        // Buscar anexos da pasta de anexos (comprar peças, etc.)
+        $anexos = $this->buscarAnexosSolicitacao($id);
+        
         // Buscar histórico de status (linha do tempo)
         try {
             $historicoStatus = $this->solicitacaoModel->getHistoricoStatus($id);
@@ -1361,6 +1364,7 @@ class LocatarioController extends Controller
             'locatario' => $locatario,
             'solicitacao' => $solicitacao,
             'fotos' => $fotos,
+            'anexos' => $anexos,
             'historicoStatus' => $historicoStatus,
             'whatsappHistorico' => $whatsappHistorico
         ]);
@@ -3881,6 +3885,38 @@ class LocatarioController extends Controller
     }
     
     /**
+     * Buscar anexos da pasta de anexos da solicitação (comprar peças, etc.)
+     */
+    private function buscarAnexosSolicitacao(int $solicitacaoId): array
+    {
+        $anexos = [];
+        $anexosDir = __DIR__ . '/../../Public/uploads/solicitacoes/' . $solicitacaoId . '/anexos/';
+        
+        if (is_dir($anexosDir)) {
+            $arquivos = scandir($anexosDir);
+            $extensoesImagem = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            
+            foreach ($arquivos as $arquivo) {
+                if ($arquivo === '.' || $arquivo === '..') {
+                    continue;
+                }
+                
+                $extension = strtolower(pathinfo($arquivo, PATHINFO_EXTENSION));
+                $isImage = in_array($extension, $extensoesImagem);
+                
+                $anexos[] = [
+                    'nome_arquivo' => $arquivo,
+                    'url' => 'uploads/solicitacoes/' . $solicitacaoId . '/anexos/' . $arquivo,
+                    'is_image' => $isImage,
+                    'extension' => $extension
+                ];
+            }
+        }
+        
+        return $anexos;
+    }
+    
+    /**
      * Processar upload de anexos
      */
     private function processarUploadAnexos(int $solicitacaoId, array $files): array
@@ -4554,6 +4590,9 @@ class LocatarioController extends Controller
             $fotos = [];
         }
         
+        // Buscar anexos da pasta de anexos (comprar peças, etc.)
+        $anexos = $this->buscarAnexosSolicitacao($result['id']);
+        
         // Buscar histórico de status
         try {
             $historicoStatus = $solicitacaoModel->getHistoricoStatus($result['id']);
@@ -4577,6 +4616,7 @@ class LocatarioController extends Controller
             'solicitacao' => $solicitacao,
             'imobiliaria' => $imobiliaria,
             'fotos' => $fotos,
+            'anexos' => $anexos,
             'historicoStatus' => $historicoStatus,
             'token' => $token
         ]);
