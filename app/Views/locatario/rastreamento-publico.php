@@ -1048,8 +1048,10 @@ function processarObservacoesComImagens($texto) {
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Anexos</label>
-                <input type="file" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                <input type="file" id="anexos-servico-nao-realizado" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent" onchange="previewAnexosComprarPecas(this)">
                 <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplos arquivos (imagens, PDF, Word)</p>
+                <!-- Preview de imagens -->
+                <div id="preview-anexos-servico-nao-realizado" class="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3"></div>
             </div>
             <div class="flex justify-end gap-3">
                 <button type="button" onclick="fecharModal('modalServicoNaoRealizado')" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
@@ -1075,8 +1077,10 @@ function processarObservacoesComImagens($texto) {
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Anexos</label>
-                <input type="file" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <input type="file" id="anexos-comprar-pecas" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="previewAnexosComprarPecas(this)">
                 <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplos arquivos (imagens, PDF, Word)</p>
+                <!-- Preview de imagens -->
+                <div id="preview-anexos-comprar-pecas" class="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3"></div>
             </div>
             <div class="flex justify-end gap-3">
                 <button type="button" onclick="fecharModal('modalComprarPecas')" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
@@ -1294,6 +1298,19 @@ function fecharModal(modalId) {
     if (form) {
         form.reset();
     }
+    // Limpar preview de anexos
+    if (modalId === 'modalComprarPecas') {
+        const preview = document.getElementById('preview-anexos-comprar-pecas');
+        if (preview) {
+            preview.innerHTML = '';
+        }
+    }
+    if (modalId === 'modalServicoNaoRealizado') {
+        const preview = document.getElementById('preview-anexos-servico-nao-realizado');
+        if (preview) {
+            preview.innerHTML = '';
+        }
+    }
 }
 
 function abrirModalFoto(url) {
@@ -1403,6 +1420,91 @@ function processarServicoNaoRealizado(event) {
         console.error('Erro:', error);
         alert('Erro ao processar. Tente novamente.');
     });
+}
+
+function previewAnexosComprarPecas(input) {
+    // Determinar qual preview usar baseado no ID do input
+    let preview;
+    if (input.id === 'anexos-comprar-pecas') {
+        preview = document.getElementById('preview-anexos-comprar-pecas');
+    } else if (input.id === 'anexos-servico-nao-realizado') {
+        preview = document.getElementById('preview-anexos-servico-nao-realizado');
+    }
+    
+    if (!preview) return;
+    
+    // Limpar preview anterior
+    preview.innerHTML = '';
+    
+    if (input.files && input.files.length > 0) {
+        Array.from(input.files).forEach((file, index) => {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                // Verificar se é imagem
+                if (file.type.startsWith('image/')) {
+                    const div = document.createElement('div');
+                    div.className = 'relative group';
+                    div.setAttribute('data-file-index', index);
+                    // Escapar aspas simples para evitar problemas no onclick
+                    const imgSrc = e.target.result.replace(/'/g, "&#39;");
+                    div.innerHTML = `
+                        <img src="${e.target.result}" 
+                             alt="${file.name.replace(/"/g, '&quot;')}" 
+                             class="w-full h-32 object-cover rounded-lg border-2 border-gray-300 cursor-pointer hover:border-blue-500 hover:opacity-90 transition-all shadow-sm"
+                             onclick="abrirModalFoto('${imgSrc}')">
+                        <button type="button" 
+                                onclick="removerAnexoPreview(${index}, '${input.id}')"
+                                class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100">
+                            ×
+                        </button>
+                        <span class="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">${file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name}</span>
+                    `;
+                    preview.appendChild(div);
+                } else {
+                    // Para arquivos não-imagem, mostrar apenas o nome
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg border-2 border-gray-300 group';
+                    div.setAttribute('data-file-index', index);
+                    div.innerHTML = `
+                        <div class="flex items-center flex-1 min-w-0">
+                            <i class="fas fa-file-alt text-gray-600 mr-2 flex-shrink-0"></i>
+                            <span class="text-sm text-gray-700 truncate">${file.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                        </div>
+                        <button type="button" 
+                                onclick="removerAnexoPreview(${index}, '${input.id}')"
+                                class="ml-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0">
+                            ×
+                        </button>
+                    `;
+                    preview.appendChild(div);
+                }
+            };
+            
+            reader.onerror = function() {
+                console.error('Erro ao ler arquivo:', file.name);
+            };
+            
+            reader.readAsDataURL(file);
+        });
+    }
+}
+
+function removerAnexoPreview(fileIndex, inputId) {
+    const input = document.getElementById(inputId);
+    if (!input || !input.files) return;
+    
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((file, index) => {
+        if (index !== fileIndex) {
+            dt.items.add(file);
+        }
+    });
+    
+    input.files = dt.files;
+    
+    // Recriar o preview sem o arquivo removido
+    previewAnexosComprarPecas(input);
 }
 
 function processarComprarPecas(event) {
