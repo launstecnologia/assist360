@@ -416,6 +416,10 @@ class SolicitacoesController extends Controller
         $fotos = $this->solicitacaoModel->getFotos($id);
         $solicitacao['fotos'] = $fotos;
         
+        // Buscar anexos da pasta de anexos (comprar peças, etc.)
+        $anexos = $this->buscarAnexosSolicitacao($id);
+        $solicitacao['anexos'] = $anexos;
+        
         // Buscar histórico de WhatsApp
         $whatsappHistorico = $this->getWhatsAppHistorico($id);
         $solicitacao['whatsapp_historico'] = $whatsappHistorico;
@@ -4762,6 +4766,38 @@ class SolicitacoesController extends Controller
             error_log('Erro ao buscar solicitação manual: ' . $e->getMessage());
             $this->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+    
+    /**
+     * Buscar anexos da pasta de anexos da solicitação (comprar peças, etc.)
+     */
+    private function buscarAnexosSolicitacao(int $solicitacaoId): array
+    {
+        $anexos = [];
+        $anexosDir = __DIR__ . '/../../Public/uploads/solicitacoes/' . $solicitacaoId . '/anexos/';
+        
+        if (is_dir($anexosDir)) {
+            $arquivos = scandir($anexosDir);
+            $extensoesImagem = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            
+            foreach ($arquivos as $arquivo) {
+                if ($arquivo === '.' || $arquivo === '..') {
+                    continue;
+                }
+                
+                $extension = strtolower(pathinfo($arquivo, PATHINFO_EXTENSION));
+                $isImage = in_array($extension, $extensoesImagem);
+                
+                $anexos[] = [
+                    'nome_arquivo' => $arquivo,
+                    'url' => 'uploads/solicitacoes/' . $solicitacaoId . '/anexos/' . $arquivo,
+                    'is_image' => $isImage,
+                    'extension' => $extension
+                ];
+            }
+        }
+        
+        return $anexos;
     }
     
     /**

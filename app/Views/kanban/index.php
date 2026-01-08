@@ -1861,11 +1861,15 @@ function renderizarDetalhes(solicitacao) {
                 <h4 class="text-sm font-medium text-gray-700 mb-3">
                     <i class="fas fa-camera mr-2 text-gray-400"></i>
                     Fotos Enviadas
-                    <span class="text-xs text-gray-500" id="fotos-count">(${solicitacao.fotos && Array.isArray(solicitacao.fotos) ? solicitacao.fotos.length : 0})</span>
+                    <span class="text-xs text-gray-500" id="fotos-count">(${
+                        (solicitacao.fotos && Array.isArray(solicitacao.fotos) ? solicitacao.fotos.length : 0) + 
+                        (solicitacao.anexos && Array.isArray(solicitacao.anexos) ? solicitacao.anexos.filter(a => a.is_image).length : 0)
+                    })</span>
                 </h4>
-                ${solicitacao.fotos && Array.isArray(solicitacao.fotos) && solicitacao.fotos.length > 0 ? `
+                ${((solicitacao.fotos && Array.isArray(solicitacao.fotos) && solicitacao.fotos.length > 0) || 
+                   (solicitacao.anexos && Array.isArray(solicitacao.anexos) && solicitacao.anexos.filter(a => a.is_image).length > 0)) ? `
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    ${solicitacao.fotos.map((foto, index) => {
+                    ${(solicitacao.fotos || []).map((foto, index) => {
                         let urlFoto = '';
                         const nomeArquivo = foto.nome_arquivo || (foto.url_arquivo ? foto.url_arquivo.split('/').pop() : '');
                         if (nomeArquivo) {
@@ -1873,7 +1877,6 @@ function renderizarDetalhes(solicitacao) {
                         } else {
                             return '';
                         }
-                        // Usar data attributes e event delegation ao invés de onclick inline
                         const fotoId = 'foto-' + solicitacao.id + '-' + index;
                         const urlFotoEscapada = urlFoto.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         const nomeArquivoEscapado = nomeArquivo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -1892,6 +1895,27 @@ function renderizarDetalhes(solicitacao) {
                             </div>
                         `;
                     }).join('')}
+                    ${(solicitacao.anexos || []).filter(a => a.is_image).map((anexo, index) => {
+                        const urlAnexo = '<?= url("Public/") ?>' + anexo.url;
+                        const urlAnexoEscapada = urlAnexo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const nomeArquivoEscapado = anexo.nome_arquivo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `
+                            <div class="relative group foto-container" 
+                                 data-foto-url="${urlAnexoEscapada}"
+                                 data-foto-nome="${nomeArquivoEscapado}">
+                                <img src="${urlAnexoEscapada}" 
+                                     alt="Anexo ${index + 1}" 
+                                     class="w-full h-32 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity shadow-sm"
+                                     onerror="this.parentElement.innerHTML='<div class=\\'w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs\\'><i class=\\'fas fa-image mr-2\\'></i>Erro</div>';">
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all flex items-center justify-center pointer-events-none">
+                                    <i class="fas fa-search-plus text-white opacity-0 group-hover:opacity-100 transition-opacity text-2xl"></i>
+                                </div>
+                                <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b-lg truncate">
+                                    <i class="fas fa-paperclip mr-1"></i>Anexo
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
                 ` : `
                 <div class="text-center py-8 text-gray-400">
@@ -1900,6 +1924,31 @@ function renderizarDetalhes(solicitacao) {
                 </div>
                 `}
             </div>
+            
+            <!-- Outros Anexos (não imagens) -->
+            ${(solicitacao.anexos && Array.isArray(solicitacao.anexos) && solicitacao.anexos.filter(a => !a.is_image).length > 0) ? `
+            <div class="mt-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">
+                    <i class="fas fa-paperclip mr-2 text-gray-400"></i>
+                    Outros Anexos (${solicitacao.anexos.filter(a => !a.is_image).length})
+                </h4>
+                <div class="space-y-2">
+                    ${solicitacao.anexos.filter(a => !a.is_image).map(anexo => {
+                        const urlAnexo = '<?= url("Public/") ?>' + anexo.url;
+                        const iconClass = anexo.extension === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-file-alt text-blue-500';
+                        return `
+                            <a href="${urlAnexo}" 
+                               target="_blank" 
+                               class="flex items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                <i class="fas ${iconClass} mr-2"></i>
+                                <span class="text-sm text-gray-700 truncate">${anexo.nome_arquivo}</span>
+                                <i class="fas fa-external-link-alt ml-auto text-gray-400 text-xs"></i>
+                            </a>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            ` : ``}
         </div>
         
         <!-- Bloco 3: Disponibilidade de Data, Status da Solicitação, Condições, Protocolo da Seguradora -->
