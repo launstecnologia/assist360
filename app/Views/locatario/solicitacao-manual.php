@@ -965,7 +965,7 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
                                         <p class="text-xs text-gray-400 mt-1">PNG, JPG até 10MB</p>
                                     </div>
                                     <input type="file" id="fotos" name="fotos[]" multiple accept="image/*" class="hidden" onchange="previewPhotos(this)">
-                                    <input type="file" id="fotos-camera" name="fotos[]" multiple accept="image/*" capture="environment" class="hidden" onchange="previewPhotos(this)">
+                                    <input type="file" id="fotos-camera" name="fotos[]" multiple accept="image/*" capture="environment" class="hidden">
                                     <div id="fotos-preview-container" class="mt-4 relative">
                                         <div id="fotos-preview" class="grid grid-cols-2 md:grid-cols-5 gap-4 hidden">
                                             <!-- Fotos serão inseridas aqui via JavaScript -->
@@ -2724,69 +2724,369 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
         });
     });
     
-    // Funções para modal de foto
-    window.abrirModalFoto = function() {
-        const modal = document.getElementById('modal-foto');
-        if (modal) {
-            modal.classList.remove('hidden');
+    // Armazenar referências dos arquivos
+    let fotosArmazenadasManual = [];
+
+    /**
+     * Módulo para captura de fotos pelo celular
+     * Gerencia upload de fotos via câmera do dispositivo ou seleção de arquivos
+     */
+    class CameraUpload {
+        constructor(options = {}) {
+            this.inputFileId = options.inputFileId || 'fotos';
+            this.inputCameraId = options.inputCameraId || 'fotos-camera';
+            this.previewId = options.previewId || 'fotos-preview';
+            this.modalId = options.modalId || 'modal-foto';
+            this.loadingId = options.loadingId || 'fotos-loading';
+            this.maxFiles = options.maxFiles || 5;
+            this.maxSize = options.maxSize || 10 * 1024 * 1024; // 10MB padrão
+            this.fotosArmazenadas = options.fotosArmazenadas || [];
+            
+            // Tornar métodos disponíveis globalmente IMEDIATAMENTE
+            window.abrirModalFoto = () => this.abrirModal();
+            window.fecharModalFoto = () => this.fecharModal();
+            window.escolherCamera = () => this.escolherCamera();
+            window.escolherArquivo = () => this.escolherArquivo();
+            window.previewPhotos = (input) => this.previewPhotos(input);
+            window.removePhoto = (fotoId) => this.removePhoto(fotoId);
+            window.combinarFotosAntesEnvio = (event) => this.combinarFotosAntesEnvio(event);
+            
+            this.init();
         }
-    };
-    
-    window.fecharModalFoto = function() {
-        const modal = document.getElementById('modal-foto');
-        if (modal) {
-            modal.classList.add('hidden');
+
+        init() {
+            // Fechar modal ao clicar fora
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => this.setupListeners());
+            } else {
+                this.setupListeners();
+            }
         }
-    };
-    
-    window.escolherCamera = function() {
-        const inputCamera = document.getElementById('fotos-camera');
-        if (inputCamera) {
-            inputCamera.click();
-        }
-        fecharModalFoto();
-    };
-    
-    window.escolherArquivo = function() {
-        const inputArquivo = document.getElementById('fotos');
-        if (inputArquivo) {
-            inputArquivo.click();
-        }
-        fecharModalFoto();
-    };
-    
-    // Combinar fotos de ambos os inputs antes de enviar o formulário
-    window.combinarFotosAntesEnvio = function(event) {
-        const inputArquivo = document.getElementById('fotos');
         
-        if (inputArquivo && fotosArmazenadasManual.length > 0) {
-            const dt = new DataTransfer();
+        setupListeners() {
+            const modal = document.getElementById(this.modalId);
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        this.fecharModal();
+                    }
+                });
+            }
             
-            // Adicionar todas as fotos armazenadas ao DataTransfer
-            fotosArmazenadasManual.forEach(foto => {
-                dt.items.add(foto.file);
-            });
+            // Adicionar listeners nos inputs
+            const inputFotos = document.getElementById(this.inputFileId);
+            const inputCamera = document.getElementById(this.inputCameraId);
             
-            // Atualizar o input principal com todos os arquivos
-            inputArquivo.files = dt.files;
+            if (inputFotos && !inputFotos.dataset.listenerAdicionado) {
+                inputFotos.addEventListener('change', (e) => {
+                    this.previewPhotos(e.target);
+                    this.fecharModal();
+                });
+                inputFotos.dataset.listenerAdicionado = 'true';
+            }
             
-            console.log(`✅ ${fotosArmazenadasManual.length} foto(s) preparada(s) para envio`);
-        } else if (fotosArmazenadasManual.length === 0) {
-            console.log('ℹ️ Nenhuma foto para enviar');
+            if (inputCamera && !inputCamera.dataset.listenerAdicionado) {
+                inputCamera.addEventListener('change', (e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                        this.previewPhotos(e.target);
+                        this.fecharModal();
+                    }
+                });
+                inputCamera.dataset.listenerAdicionado = 'true';
+            }
+            
+            // Inicializar estado do botão
+            this.atualizarBotaoAdicionarFotos();
         }
-    };
-    
-    // Fechar modal ao clicar fora
-    document.addEventListener('DOMContentLoaded', function() {
-        const modal = document.getElementById('modal-foto');
-        if (modal) {
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    fecharModalFoto();
+
+        /**
+         * Abrir modal para escolher entre câmera ou arquivos
+         */
+        abrirModal() {
+            if (this.fotosArmazenadas.length >= this.maxFiles) {
+                alert(`Você já adicionou o máximo de ${this.maxFiles} fotos`);
+                return;
+            }
+            
+            const modal = document.getElementById(this.modalId);
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Fechar modal
+         */
+        fecharModal() {
+            const modal = document.getElementById(this.modalId);
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Escolher câmera para capturar foto
+         */
+        escolherCamera() {
+            const inputCamera = document.getElementById(this.inputCameraId);
+            if (inputCamera) {
+                inputCamera.click();
+            }
+        }
+
+        /**
+         * Escolher arquivo do dispositivo
+         */
+        escolherArquivo() {
+            const inputArquivo = document.getElementById(this.inputFileId);
+            if (inputArquivo) {
+                inputArquivo.click();
+            }
+        }
+
+        /**
+         * Preview das fotos selecionadas
+         */
+        previewPhotos(input) {
+            const preview = document.getElementById(this.previewId);
+            const loadingOverlay = document.getElementById(this.loadingId);
+            const inputArquivo = document.getElementById(this.inputFileId);
+            const inputCamera = document.getElementById(this.inputCameraId);
+
+            // Usar apenas os arquivos do input que foi alterado
+            let allFiles = [];
+            if (input && input.files && input.files.length > 0) {
+                allFiles = Array.from(input.files);
+            }
+
+            // Filtrar apenas imagens
+            const todasFotos = allFiles.filter(f => f.type.startsWith('image/'));
+
+            // Detectar apenas as NOVAS fotos
+            const novasFotos = todasFotos.filter(novaFoto => {
+                return !this.fotosArmazenadas.some(fotoArmazenada => {
+                    const mesmoTamanho = fotoArmazenada.file.size === novaFoto.size;
+                    const mesmoTimestamp = fotoArmazenada.file.lastModified === novaFoto.lastModified;
+                    if (input === inputCamera) {
+                        return mesmoTamanho && mesmoTimestamp;
+                    } else {
+                        return mesmoTamanho && mesmoTimestamp && fotoArmazenada.file.name === novaFoto.name;
+                    }
+                });
+            });
+
+            if (novasFotos.length > 0) {
+                // Verificar limite
+                const totalAposAdicao = this.fotosArmazenadas.length + novasFotos.length;
+                const fotosParaAdicionar = totalAposAdicao > this.maxFiles 
+                    ? novasFotos.slice(0, this.maxFiles - this.fotosArmazenadas.length)
+                    : novasFotos;
+                
+                if (fotosParaAdicionar.length === 0) {
+                    alert(`Você já adicionou o máximo de ${this.maxFiles} fotos`);
+                    return;
                 }
+
+                if (preview) {
+                    preview.classList.remove('hidden');
+                }
+
+                // Mostrar loading
+                if (loadingOverlay) {
+                    loadingOverlay.classList.remove('hidden');
+                }
+
+                let fotosProcessadas = 0;
+                const totalFotos = fotosParaAdicionar.length;
+
+                const verificarConclusao = () => {
+                    if (fotosProcessadas === totalFotos) {
+                        if (loadingOverlay) {
+                            loadingOverlay.classList.add('hidden');
+                        }
+                        
+                        // Limpar inputs
+                        if (input === inputArquivo && inputArquivo) {
+                            inputArquivo.value = '';
+                        }
+                        if (input === inputCamera && inputCamera) {
+                            inputCamera.value = '';
+                        }
+                        
+                        this.atualizarBotaoAdicionarFotos();
+                    }
+                };
+
+                fotosParaAdicionar.forEach((file, index) => {
+                    // Validar tamanho
+                    if (file.size > this.maxSize) {
+                        alert(`Arquivo ${file.name} excede o tamanho máximo de ${this.maxSize / 1024 / 1024}MB`);
+                        fotosProcessadas++;
+                        verificarConclusao();
+                        return;
+                    }
+
+                    const fotoId = Date.now() + '_' + index + '_' + Math.random().toString(36).substr(2, 9);
+                    
+                    // Armazenar referência do arquivo
+                    this.fotosArmazenadas.push({
+                        id: fotoId,
+                        file: file,
+                        input: input === inputArquivo ? 'arquivo' : 'camera'
+                    });
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const fotoAindaExiste = this.fotosArmazenadas.some(f => f.id === fotoId);
+                        if (!fotoAindaExiste) {
+                            fotosProcessadas++;
+                            verificarConclusao();
+                            return;
+                        }
+
+                        const fotoExisteDOM = document.querySelector(`[data-foto-id="${fotoId}"]`);
+                        if (fotoExisteDOM) {
+                            fotosProcessadas++;
+                            verificarConclusao();
+                            return;
+                        }
+
+                        const div = document.createElement('div');
+                        div.className = 'relative';
+                        div.setAttribute('data-foto-id', fotoId);
+                        div.innerHTML = `
+                            <img src="${e.target.result}" class="w-full h-24 object-cover rounded-lg border border-gray-200">
+                            <button type="button" onclick="window.removePhoto('${fotoId}')" 
+                                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 z-10">
+                                ×
+                            </button>
+                        `;
+                        if (preview) {
+                            preview.appendChild(div);
+                        }
+
+                        fotosProcessadas++;
+                        verificarConclusao();
+                    };
+                    reader.onerror = () => {
+                        this.fotosArmazenadas = this.fotosArmazenadas.filter(f => f.id !== fotoId);
+                        fotosProcessadas++;
+                        verificarConclusao();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            } else {
+                if (preview && this.fotosArmazenadas.length === 0) {
+                    preview.classList.add('hidden');
+                }
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('hidden');
+                }
+            }
+        }
+
+        /**
+         * Remover foto do preview
+         */
+        removePhoto(fotoId) {
+            const fotoIndex = this.fotosArmazenadas.findIndex(f => f.id === fotoId);
+            if (fotoIndex === -1) return;
+
+            this.fotosArmazenadas.splice(fotoIndex, 1);
+
+            const fotoElement = document.querySelector(`[data-foto-id="${fotoId}"]`);
+            if (fotoElement && fotoElement.parentNode) {
+                fotoElement.remove();
+            }
+
+            const preview = document.getElementById(this.previewId);
+            if (this.fotosArmazenadas.length === 0 && preview) {
+                preview.classList.add('hidden');
+            }
+
+            this.atualizarBotaoAdicionarFotos();
+        }
+
+        /**
+         * Atualizar estado do botão de adicionar fotos
+         */
+        atualizarBotaoAdicionarFotos() {
+            const botaoAdicionar = document.querySelector('div[onclick="abrirModalFoto()"]');
+            if (!botaoAdicionar) return;
+
+            if (this.fotosArmazenadas.length >= this.maxFiles) {
+                botaoAdicionar.style.opacity = '0.5';
+                botaoAdicionar.style.cursor = 'not-allowed';
+                botaoAdicionar.style.pointerEvents = 'none';
+                botaoAdicionar.onclick = null;
+            } else {
+                botaoAdicionar.style.opacity = '1';
+                botaoAdicionar.style.cursor = 'pointer';
+                botaoAdicionar.style.pointerEvents = 'auto';
+                botaoAdicionar.onclick = this.abrirModal.bind(this);
+            }
+        }
+
+        /**
+         * Combinar fotos de ambos os inputs antes de enviar o formulário
+         */
+        combinarFotosAntesEnvio(event) {
+            const loadingOverlay = document.getElementById(this.loadingId);
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('hidden');
+            }
+
+            const btnContinuar = document.getElementById('btn-continuar');
+            if (btnContinuar) {
+                btnContinuar.disabled = true;
+                btnContinuar.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enviando...';
+            }
+
+            const inputArquivo = document.getElementById(this.inputFileId);
+
+            if (inputArquivo && this.fotosArmazenadas.length > 0) {
+                const dt = new DataTransfer();
+
+                this.fotosArmazenadas.forEach(foto => {
+                    dt.items.add(foto.file);
+                });
+
+                inputArquivo.files = dt.files;
+            }
+        }
+    }
+
+    // Inicializar quando o DOM estiver pronto
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('fotos') || document.getElementById('fotos-camera')) {
+                window.cameraUpload = new CameraUpload({
+                    inputFileId: 'fotos',
+                    inputCameraId: 'fotos-camera',
+                    previewId: 'fotos-preview',
+                    modalId: 'modal-foto',
+                    loadingId: 'fotos-loading',
+                    maxFiles: 5,
+                    maxSize: 10 * 1024 * 1024,
+                    fotosArmazenadas: fotosArmazenadasManual
+                });
+            }
+        });
+    } else {
+        // DOM já está pronto, inicializar imediatamente
+        if (document.getElementById('fotos') || document.getElementById('fotos-camera')) {
+            window.cameraUpload = new CameraUpload({
+                inputFileId: 'fotos',
+                inputCameraId: 'fotos-camera',
+                previewId: 'fotos-preview',
+                modalId: 'modal-foto',
+                loadingId: 'fotos-loading',
+                maxFiles: 5,
+                maxSize: 10 * 1024 * 1024,
+                fotosArmazenadas: fotosArmazenadasManual
             });
         }
-    });
+    }
     
     // Função para toggle do resumo das etapas
     function toggleResumoEtapas() {
@@ -2842,168 +3142,6 @@ function gerarResumoEtapasManual($etapaAtual, $dados) {
     // Também disponibilizar globalmente para compatibilidade
     window.toggleResumoEtapas = toggleResumoEtapas;
     
-    // Armazenar referências dos arquivos para poder remover corretamente
-    let fotosArmazenadasManual = [];
-    
-    window.previewPhotos = function(input) {
-        const preview = document.getElementById('fotos-preview');
-        const loadingOverlay = document.getElementById('fotos-loading');
-        const inputArquivo = document.getElementById('fotos');
-        const inputCamera = document.getElementById('fotos-camera');
-        
-        // Combinar arquivos de ambos os inputs
-        let allFiles = [];
-        if (inputArquivo && inputArquivo.files) {
-            allFiles = Array.from(inputArquivo.files);
-        }
-        if (inputCamera && inputCamera.files) {
-            allFiles = allFiles.concat(Array.from(inputCamera.files));
-        }
-        
-        // Filtrar apenas imagens
-        const todasFotos = allFiles.filter(f => f.type.startsWith('image/'));
-        
-        // Detectar apenas as NOVAS fotos (comparando nome, tamanho e data de modificação)
-        const novasFotos = todasFotos.filter(novaFoto => {
-            // Verificar se esta foto já está armazenada
-            return !fotosArmazenadasManual.some(fotoArmazenada => {
-                return fotoArmazenada.file.name === novaFoto.name && 
-                       fotoArmazenada.file.size === novaFoto.size &&
-                       fotoArmazenada.file.lastModified === novaFoto.lastModified;
-            });
-        });
-        
-        if (novasFotos.length > 0) {
-            // Verificar limite de 5 fotos
-            const totalAposAdicao = fotosArmazenadasManual.length + novasFotos.length;
-            const fotosParaAdicionar = totalAposAdicao > 5 
-                ? novasFotos.slice(0, 5 - fotosArmazenadasManual.length)
-                : novasFotos;
-            
-            if (fotosParaAdicionar.length === 0) {
-                alert('Você já adicionou o máximo de 5 fotos');
-                return;
-            }
-            
-            preview.classList.remove('hidden');
-            
-            let fotosProcessadas = 0;
-            const totalFotos = fotosParaAdicionar.length;
-            let loadingTimeout = null;
-            let loadingMostrado = false;
-            
-            // Mostrar loading apenas se demorar mais de 500ms
-            loadingTimeout = setTimeout(() => {
-                if (fotosProcessadas < totalFotos && loadingOverlay) {
-                    loadingOverlay.classList.remove('hidden');
-                    loadingMostrado = true;
-                    console.log('Loading mostrado (demorou mais de 500ms)');
-                }
-            }, 500);
-            
-            // Função para verificar se todas as fotos foram processadas
-            const verificarConclusao = function() {
-                if (fotosProcessadas === totalFotos) {
-                    // Cancelar timeout se ainda não foi executado
-                    if (loadingTimeout) {
-                        clearTimeout(loadingTimeout);
-                    }
-                    
-                    // Esconder loading se foi mostrado
-                    if (loadingMostrado && loadingOverlay) {
-                        loadingOverlay.classList.add('hidden');
-                        console.log('Loading escondido');
-                    }
-                    
-                    // Limpar inputs após processar para permitir adicionar mais fotos
-                    if (input === inputArquivo && inputArquivo) {
-                        inputArquivo.value = '';
-                    }
-                    if (input === inputCamera && inputCamera) {
-                        inputCamera.value = '';
-                    }
-                }
-            };
-            
-            fotosParaAdicionar.forEach((file) => {
-                // Criar ID único para a foto
-                const fotoId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                
-                // Armazenar referência do arquivo
-                fotosArmazenadasManual.push({
-                    id: fotoId,
-                    file: file,
-                    input: input === inputArquivo ? 'arquivo' : 'camera'
-                });
-                
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const div = document.createElement('div');
-                        div.className = 'relative';
-                    div.setAttribute('data-foto-id', fotoId);
-                        div.innerHTML = `
-                            <img src="${e.target.result}" class="w-full h-24 object-cover rounded-lg border border-gray-200">
-                        <button type="button" onclick="removePhoto('${fotoId}')" 
-                                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
-                                ×
-                            </button>
-                        `;
-                        preview.appendChild(div);
-                    
-                    fotosProcessadas++;
-                    verificarConclusao();
-                };
-                reader.onerror = function() {
-                    // Remover da lista se houver erro
-                    fotosArmazenadasManual = fotosArmazenadasManual.filter(f => f.id !== fotoId);
-                    fotosProcessadas++;
-                    verificarConclusao();
-                    };
-                    reader.readAsDataURL(file);
-            });
-        } else {
-            // Se não houver novas fotos, verificar se ainda há fotos no preview
-            if (fotosArmazenadasManual.length === 0) {
-            preview.classList.add('hidden');
-            }
-            if (loadingOverlay) {
-                loadingOverlay.classList.add('hidden');
-            }
-        }
-    };
-    
-    window.removePhoto = function(fotoId) {
-        // Remover da lista de fotos armazenadas
-        const fotoIndex = fotosArmazenadasManual.findIndex(f => f.id === fotoId);
-        if (fotoIndex === -1) return;
-        
-        fotosArmazenadasManual.splice(fotoIndex, 1);
-        
-        // Remover do DOM
-        const fotoElement = document.querySelector(`[data-foto-id="${fotoId}"]`);
-        if (fotoElement) {
-            fotoElement.remove();
-        }
-        
-        // Atualizar os inputs de arquivo (limpar para permitir adicionar novas)
-        const input = document.getElementById('fotos');
-        const inputCamera = document.getElementById('fotos-camera');
-        
-        if (input) {
-            input.value = '';
-        }
-        if (inputCamera) {
-            inputCamera.value = '';
-        }
-        
-        // Se não houver mais fotos, esconder preview
-        if (fotosArmazenadasManual.length === 0) {
-            const preview = document.getElementById('fotos-preview');
-            if (preview) {
-                preview.classList.add('hidden');
-            }
-        }
-    };
     
     // Sistema de horários
     let horariosEscolhidos = [];
