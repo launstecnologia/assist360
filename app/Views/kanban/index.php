@@ -4461,6 +4461,217 @@ document.addEventListener('change', function(e) {
     });
 })();
 
+// ============================================
+// ATUALIZAÇÃO AUTOMÁTICA DE CARDS EXISTENTES
+// ============================================
+(function() {
+    'use strict';
+    
+    let intervaloAtualizacaoCards = null;
+    let ultimaVerificacao = Date.now();
+    let cardsRastreados = new Map(); // Map<id, {statusId, updatedAt}>
+    
+    // Função para coletar informações dos cards existentes
+    function coletarInfoCards() {
+        cardsRastreados.clear();
+        const cards = document.querySelectorAll('.kanban-card[data-solicitacao-id]');
+        cards.forEach(card => {
+            const id = parseInt(card.getAttribute('data-solicitacao-id'));
+            const statusId = parseInt(card.getAttribute('data-status-id'));
+            if (id && statusId) {
+                cardsRastreados.set(id, {
+                    statusId: statusId,
+                    cardElement: card
+                });
+            }
+        });
+    }
+    
+    // Função para encontrar a coluna por status_id
+    function encontrarColunaPorStatusId(statusId) {
+        const colunas = document.querySelectorAll('.kanban-column');
+        for (let coluna of colunas) {
+            const cardsContainer = coluna.querySelector('.kanban-cards');
+            if (cardsContainer) {
+                const colunaStatusId = parseInt(cardsContainer.getAttribute('data-status-id'));
+                if (colunaStatusId === statusId) {
+                    return coluna;
+                }
+            }
+        }
+        return null;
+    }
+    
+    // Função para mover card para o topo da coluna
+    function moverCardParaTopo(card, coluna) {
+        const cardsContainer = coluna.querySelector('.kanban-cards');
+        if (!cardsContainer) return;
+        
+        // Remover mensagem "Nenhuma solicitação" se existir
+        const mensagemVazia = cardsContainer.querySelector('.text-center.py-8');
+        if (mensagemVazia) {
+            mensagemVazia.remove();
+        }
+        
+        // Remover card da posição atual
+        card.remove();
+        
+        // Adicionar no topo
+        if (cardsContainer.firstChild) {
+            cardsContainer.insertBefore(card, cardsContainer.firstChild);
+        } else {
+            cardsContainer.appendChild(card);
+        }
+        
+        // Adicionar animação
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.3s ease-in-out';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, 10);
+    }
+    
+    // Função para atualizar card existente (quando status não mudou, apenas move para topo)
+    function atualizarCardExistente(solicitacao, cardExistente) {
+        const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
+        const statusIdNovo = parseInt(solicitacao.status_id);
+        
+        // Se mudou de status, mover para nova coluna
+        if (statusIdAtual !== statusIdNovo) {
+            const novaColuna = encontrarColunaPorStatusId(statusIdNovo);
+            if (novaColuna) {
+                // Atualizar atributos do card
+                cardExistente.setAttribute('data-status-id', statusIdNovo);
+                
+                // Atualizar cor da borda
+                const statusCor = solicitacao.status_cor || '#3B82F6';
+                cardExistente.style.borderColor = statusCor;
+                
+                // Mover para nova coluna
+                moverCardParaTopo(cardExistente, novaColuna);
+                
+                // Atualizar contadores
+                atualizarContadores();
+                
+                console.log(`🔄 Card #${solicitacao.id} movido de status ${statusIdAtual} para ${statusIdNovo} ("${solicitacao.status_nome}")`);
+            } else {
+                console.warn(`⚠️ Coluna não encontrada para status_id ${statusIdNovo} (card #${solicitacao.id})`);
+            }
+        } else {
+            // Mesmo status, apenas mover para topo (card foi atualizado)
+            const colunaAtual = cardExistente.closest('.kanban-column');
+            if (colunaAtual) {
+                moverCardParaTopo(cardExistente, colunaAtual);
+                console.log(`⬆️ Card #${solicitacao.id} movido para o topo da coluna "${solicitacao.status_nome}"`);
+            }
+        }
+    }
+    
+    // Função para atualizar contadores das colunas
+    function atualizarContadores() {
+        const colunas = document.querySelectorAll('.kanban-column');
+        colunas.forEach(coluna => {
+            const cardsContainer = coluna.querySelector('.kanban-cards');
+            const contador = coluna.querySelector('.bg-gray-200');
+            if (cardsContainer && contador) {
+                const totalCards = cardsContainer.querySelectorAll('.kanban-card').length;
+                contador.textContent = totalCards;
+            }
+        });
+    }
+    
+    // Função para buscar solicitações atualizadas
+    function buscarSolicitacoesAtualizadas() {
+        const imobiliariaId = new URLSearchParams(window.location.search).get('imobiliaria_id') || '';
+        // Aumentar para 10 segundos para garantir que capture todas as atualizações
+        const url = `<?= url('admin/kanban/solicitacoes-atualizadas') ?>?ultimos_segundos=10${imobiliariaId ? '&imobiliaria_id=' + imobiliariaId : ''}`;
+        
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.solicitacoes && data.solicitacoes.length > 0) {
+                // Coletar info dos cards atuais ANTES de processar
+                const cardsAntes = new Map();
+                document.querySelectorAll('.kanban-card[data-solicitacao-id]').forEach(card => {
+                    const id = parseInt(card.getAttribute('data-solicitacao-id'));
+                    const statusId = parseInt(card.getAttribute('data-status-id'));
+                    if (id && statusId) {
+                        cardsAntes.set(id, {
+                            statusId: statusId,
+                            coluna: card.closest('.kanban-column')
+                        });
+                    }
+                });
+                
+                // Processar cada solicitação atualizada
+                data.solicitacoes.forEach(solicitacao => {
+                    const cardId = `kanban-card-${solicitacao.id}`;
+                    const cardExistente = document.getElementById(cardId);
+                    const statusIdNovo = parseInt(solicitacao.status_id);
+                    
+                    if (cardExistente) {
+                        const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
+                        const infoAntes = cardsAntes.get(solicitacao.id);
+                        
+                        // Se mudou de status OU se não temos informação anterior, atualizar
+                        if (statusIdAtual !== statusIdNovo || !infoAntes) {
+                            console.log(`🔄 Detectada mudança no card #${solicitacao.id}: Status ${statusIdAtual} → ${statusIdNovo}`);
+                            atualizarCardExistente(solicitacao, cardExistente);
+                        } else {
+                            // Mesmo status, apenas mover para topo se foi atualizado recentemente
+                            const colunaAtual = cardExistente.closest('.kanban-column');
+                            if (colunaAtual) {
+                                moverCardParaTopo(cardExistente, colunaAtual);
+                            }
+                        }
+                    }
+                    // Se o card não existe, ele será adicionado pela funcionalidade de "novas solicitações"
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao buscar solicitações atualizadas:', error);
+        });
+    }
+    
+    // Inicializar quando a página carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        // Coletar informações iniciais dos cards
+        coletarInfoCards();
+        
+        // Iniciar polling a cada 3 segundos (mais frequente para detectar mudanças rapidamente)
+        intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+        
+        // Fazer uma busca imediata ao carregar
+        buscarSolicitacoesAtualizadas();
+        
+        console.log('✅ Atualização automática de cards do Kanban ativada (a cada 3 segundos)');
+    });
+    
+    // Parar polling quando a página for escondida (otimização)
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (intervaloAtualizacaoCards) {
+                clearInterval(intervaloAtualizacaoCards);
+                intervaloAtualizacaoCards = null;
+            }
+        } else {
+            if (!intervaloAtualizacaoCards) {
+                intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+                // Fazer busca imediata ao voltar para a página
+                buscarSolicitacoesAtualizadas();
+            }
+        }
+    });
+})();
+
     // ==================== FUNÇÕES DO CHAT ====================
     let chatSolicitacaoId = null;
     let chatPollingInterval = null;

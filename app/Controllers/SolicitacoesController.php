@@ -1960,15 +1960,15 @@ class SolicitacoesController extends Controller
             }
             
             // ✅ VALIDAÇÃO: Verificar se o status atual é "Serviço Agendado"
-            // Não é possível confirmar horário sem estar em "Serviço Agendado"
+            // Só validar se o status atual for "Nova Solicitação"
             $statusAtualId = $solicitacaoAtual['status_id'] ?? null;
             if ($statusAtualId) {
                 $sqlStatusAtual = "SELECT nome FROM status WHERE id = ?";
                 $statusAtualData = \App\Core\Database::fetch($sqlStatusAtual, [$statusAtualId]);
                 $statusAtualNome = $statusAtualData['nome'] ?? '';
                 
-                // Verificar se o status atual não é "Serviço Agendado"
-                if ($statusAtualNome !== 'Serviço Agendado') {
+                // Só validar se o status atual for "Nova Solicitação"
+                if ($statusAtualNome === 'Nova Solicitação' && $statusAtualNome !== 'Serviço Agendado') {
                     $retornarJson(false, '', 'É necessário alterar o status para "Serviço Agendado" antes de confirmar um horário. Por favor, altere o status primeiro.');
                     return;
                 }
@@ -3084,7 +3084,7 @@ class SolicitacoesController extends Controller
                 }
                 
                 // ✅ VALIDAÇÃO: Verificar se o status atual é "Serviço Agendado" antes de confirmar horários
-                // Não é possível confirmar horários sem estar em "Serviço Agendado"
+                // Só validar se o status atual for "Nova Solicitação"
                 $statusAtualId = $solicitacaoAtual['status_id'] ?? null;
                 $statusAtualNome = '';
                 if ($statusAtualId) {
@@ -3094,8 +3094,8 @@ class SolicitacoesController extends Controller
                 }
                 
                 // Se está tentando confirmar horários (schedulesFromJson não está vazio)
-                // e o status não é "Serviço Agendado" E não está mudando para "Serviço Agendado"
-                if (!empty($schedulesFromJson) && $statusAtualNome !== 'Serviço Agendado') {
+                // e o status atual é "Nova Solicitação" E não é "Serviço Agendado" E não está mudando para "Serviço Agendado"
+                if (!empty($schedulesFromJson) && $statusAtualNome === 'Nova Solicitação' && $statusAtualNome !== 'Serviço Agendado') {
                     // Verificar se está mudando o status para "Serviço Agendado" neste mesmo update
                     $statusMudandoParaAgendado = false;
                     if (isset($dados['status_id'])) {
