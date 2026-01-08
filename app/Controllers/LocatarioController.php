@@ -3606,6 +3606,22 @@ class LocatarioController extends Controller
                     
                     try {
                         $this->solicitacaoModel->update($id, $updateData);
+                        
+                        // Registrar no histórico com observações incluindo anexos
+                        if ($statusPendente) {
+                            // Criar observação resumida para o histórico
+                            $observacaoHistorico = "[Comprar peças em {$timestamp}]";
+                            if (!empty($observacaoInput)) {
+                                $observacaoHistorico .= " Observação: {$observacaoInput}";
+                            }
+                            $observacaoHistorico .= "\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite));
+                            if (!empty($anexosSalvos)) {
+                                $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                            }
+                            
+                            $this->registrarHistoricoLocatario($id, $statusPendente['id'], $observacaoHistorico);
+                        }
+                        
                         $this->json(['success' => true, 'message' => 'Informação registrada: necessário comprar peças. Prazo de 10 dias definido.']);
                     } catch (\Exception $e) {
                         // Se alguma coluna opcional não existir, remover e tentar novamente
@@ -3627,6 +3643,21 @@ class LocatarioController extends Controller
                         if ($alterado) {
                             error_log('Aviso: removendo colunas opcionais inexistentes ao salvar "Comprar peças".');
                             $this->solicitacaoModel->update($id, $updateData);
+                            
+                            // Registrar no histórico mesmo em caso de erro com colunas opcionais
+                            if ($statusPendente) {
+                                $observacaoHistorico = "[Comprar peças em {$timestamp}]";
+                                if (!empty($observacaoInput)) {
+                                    $observacaoHistorico .= " Observação: {$observacaoInput}";
+                                }
+                                $observacaoHistorico .= "\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite));
+                                if (!empty($anexosSalvos)) {
+                                    $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                                }
+                                
+                                $this->registrarHistoricoLocatario($id, $statusPendente['id'], $observacaoHistorico);
+                            }
+                            
                             $this->json(['success' => true, 'message' => 'Informação registrada: necessário comprar peças.']);
                         } else {
                             throw $e;
@@ -4168,6 +4199,22 @@ class LocatarioController extends Controller
                     
                     try {
                         $this->solicitacaoModel->update($solicitacaoId, $updateData);
+                        
+                        // Registrar no histórico com observações incluindo anexos
+                        if ($statusPendente) {
+                            // Criar observação resumida para o histórico
+                            $observacaoHistorico = "[Comprar peças em {$timestamp}]";
+                            if (!empty($observacaoInput)) {
+                                $observacaoHistorico .= " Observação: {$observacaoInput}";
+                            }
+                            $observacaoHistorico .= "\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite));
+                            if (!empty($anexosSalvos)) {
+                                $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                            }
+                            
+                            $this->registrarHistoricoLocatario($solicitacaoId, $statusPendente['id'], $observacaoHistorico);
+                        }
+                        
                         $this->json(['success' => true, 'message' => 'Informação registrada: necessário comprar peças. Prazo de 10 dias definido.']);
                     } catch (\Exception $e) {
                         // Se alguma coluna opcional não existir, remover e tentar novamente
@@ -4189,6 +4236,21 @@ class LocatarioController extends Controller
                         if ($alterado) {
                             error_log('Aviso: removendo colunas opcionais inexistentes ao salvar "Comprar peças" (token público).');
                             $this->solicitacaoModel->update($solicitacaoId, $updateData);
+                            
+                            // Registrar no histórico mesmo em caso de erro com colunas opcionais
+                            if ($statusPendente) {
+                                $observacaoHistorico = "[Comprar peças em {$timestamp}]";
+                                if (!empty($observacaoInput)) {
+                                    $observacaoHistorico .= " Observação: {$observacaoInput}";
+                                }
+                                $observacaoHistorico .= "\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite));
+                                if (!empty($anexosSalvos)) {
+                                    $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                                }
+                                
+                                $this->registrarHistoricoLocatario($solicitacaoId, $statusPendente['id'], $observacaoHistorico);
+                            }
+                            
                             $this->json(['success' => true, 'message' => 'Informação registrada: necessário comprar peças.']);
                         } else {
                             throw $e;
