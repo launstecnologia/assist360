@@ -1180,7 +1180,7 @@ class LocatarioController extends Controller
         
         // Criar solicitação
         try {
-            $solicitacaoId = $this->solicitacaoModel->create($data);
+        $solicitacaoId = $this->solicitacaoModel->create($data);
             
             if (!$solicitacaoId || $solicitacaoId <= 0) {
                 error_log("ERRO [finalizarSolicitacao] - create() retornou ID inválido: " . $solicitacaoId);
@@ -2577,7 +2577,7 @@ class LocatarioController extends Controller
                 ];
                 
                 try {
-                    $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
                     
                     if (!$solicitacaoId || $solicitacaoId <= 0) {
                         error_log("ERRO [finalizarSolicitacaoManual - múltiplas categorias] - create() retornou ID inválido: " . $solicitacaoId);
@@ -2728,8 +2728,8 @@ class LocatarioController extends Controller
             
             // Criar solicitação normal
             try {
-                $solicitacaoModel = new \App\Models\Solicitacao();
-                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+            $solicitacaoModel = new \App\Models\Solicitacao();
+            $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
                 
                 if (!$solicitacaoId || $solicitacaoId <= 0) {
                     error_log("ERRO [finalizarSolicitacaoManual] - create() retornou ID inválido: " . $solicitacaoId);
@@ -2737,17 +2737,17 @@ class LocatarioController extends Controller
                     $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação. Tente novamente.')));
                     return;
                 }
-                
-                // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
-                if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
-                    // Verificar se precisa atualizar
-                    $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
-                    if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
-                        if (empty($solicitacaoCriada['tipo_qualificacao'])) {
-                            \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
-                            error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
-                        }
+            
+            // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
+            if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
+                // Verificar se precisa atualizar
+                $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
+                if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
+                    if (empty($solicitacaoCriada['tipo_qualificacao'])) {
+                        \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
+                        error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
                     }
+                }
                 }
             } catch (\Exception $e) {
                 error_log("ERRO [finalizarSolicitacaoManual] ao criar solicitação: " . $e->getMessage());
@@ -2970,7 +2970,7 @@ class LocatarioController extends Controller
                     
                     // Criar solicitação manual
                     try {
-                        $id = $solicitacaoManualModel->create($dadosParaSalvar);
+                    $id = $solicitacaoManualModel->create($dadosParaSalvar);
                         
                         if (!$id || $id <= 0) {
                             error_log("ERRO [finalizarSolicitacaoManual - solicitação manual] - create() retornou ID inválido: " . $id);
@@ -3643,7 +3643,7 @@ class LocatarioController extends Controller
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                        $statusPendente = $statusModel->findByNome('Pendente');
+                    $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
@@ -4234,7 +4234,7 @@ class LocatarioController extends Controller
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                        $statusPendente = $statusModel->findByNome('Pendente');
+                    $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');

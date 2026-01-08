@@ -4592,11 +4592,49 @@ document.addEventListener('change', function(e) {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
-            }
+            },
+            credentials: 'same-origin'
         })
-        .then(response => response.json())
+        .then(response => {
+            // Verificar se a resposta é OK
+            if (!response.ok) {
+                // Se for 404, a rota não existe - desabilitar polling silenciosamente
+                if (response.status === 404) {
+                    if (!window.rotaAtualizacaoDesabilitada) {
+                        console.warn('⚠️ Rota de atualização automática não encontrada. Funcionalidade desabilitada.');
+                        window.rotaAtualizacaoDesabilitada = true;
+                        // Parar o polling
+                        if (intervaloAtualizacaoCards) {
+                            clearInterval(intervaloAtualizacaoCards);
+                            intervaloAtualizacaoCards = null;
+                        }
+                    }
+                    return null; // Retornar null para não processar
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Verificar se o content-type é JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Resposta não é JSON');
+            }
+            
+            return response.json();
+        })
         .then(data => {
-            if (data.success && data.solicitacoes && data.solicitacoes.length > 0) {
+            // Se data é null (rota não existe), não processar
+            if (!data) {
+                return;
+            }
+            
+            // Verificar se há erro na resposta
+            if (!data.success) {
+                console.warn('⚠️ Endpoint retornou success=false:', data.error || data.message);
+                return;
+            }
+            
+            if (data.solicitacoes && data.solicitacoes.length > 0) {
                 // Coletar info dos cards atuais ANTES de processar
                 const cardsAntes = new Map();
                 document.querySelectorAll('.kanban-card[data-solicitacao-id]').forEach(card => {
@@ -4637,7 +4675,25 @@ document.addEventListener('change', function(e) {
             }
         })
         .catch(error => {
-            console.error('Erro ao buscar solicitações atualizadas:', error);
+            // Só logar erros que não sejam 404 (rota não existe)
+            if (!window.rotaAtualizacaoDesabilitada) {
+                // Verificar se é erro de parsing JSON (provavelmente 404 retornando HTML)
+                if (error.message && error.message.includes('JSON')) {
+                    console.warn('⚠️ Rota de atualização automática não encontrada. Funcionalidade desabilitada.');
+                    window.rotaAtualizacaoDesabilitada = true;
+                    // Parar o polling
+                    if (intervaloAtualizacaoCards) {
+                        clearInterval(intervaloAtualizacaoCards);
+                        intervaloAtualizacaoCards = null;
+                    }
+                } else {
+                    // Outros erros - logar apenas uma vez por minuto
+                    if (!window.lastErrorLog || Date.now() - window.lastErrorLog > 60000) {
+                        console.error('❌ Erro ao buscar solicitações atualizadas:', error.message);
+                        window.lastErrorLog = Date.now();
+                    }
+                }
+            }
         });
     }
     
