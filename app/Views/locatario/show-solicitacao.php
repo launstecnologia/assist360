@@ -345,6 +345,27 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
                 $estagios[1]['completo'] = true;
                 $estagios[1]['ativo'] = false;
                 $estagios[2]['ativo'] = true;
+            } elseif (stripos($statusNome, 'Pendente Cliente') !== false || 
+                      stripos($statusNome, 'Pendente') !== false || 
+                      stripos($statusNome, 'Pendências') !== false ||
+                      stripos($statusNome, 'Pendências Cliente') !== false) {
+                // Status de pendência (ex: precisa comprar peças) - mantém no estágio atual (não volta)
+                // Se estava em "Serviço Agendado", mantém lá; se estava em outro, mantém
+                // Apenas marca que há uma pendência
+                if (stripos($statusNome, 'Serviço Agendado') === false) {
+                    // Se não estava agendado, volta para "Buscando Prestador"
+                    $estagios[1]['completo'] = true;
+                    $estagios[1]['ativo'] = false;
+                    $estagios[2]['ativo'] = true;
+                } else {
+                    // Se estava agendado, mantém no estágio de agendamento
+                    $estagios[1]['completo'] = true;
+                    $estagios[1]['ativo'] = false;
+                    $estagios[2]['completo'] = true;
+                    $estagios[2]['ativo'] = false;
+                    $estagios[3]['ativo'] = true;
+                    $estagios[3]['data'] = $solicitacao['data_agendamento'] ?? null;
+                }
             } elseif (stripos($statusNome, 'Serviço Agendado') !== false || stripos($statusNome, 'Servico Agendado') !== false) {
                 $estagios[1]['completo'] = true;
                 $estagios[1]['ativo'] = false;
@@ -607,6 +628,24 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
                     <span class="sm:hidden">Outros</span>
                 </button>
                 
+                <?php
+            }
+            
+            // Botão "Peça comprada" - aparece quando a condição "Comprar peças" está ativa (independente do status)
+            $temCondicaoComprarPecas = stripos($condicaoNome, 'comprar peças') !== false || 
+                                       stripos($condicaoNome, 'comprar pecas') !== false ||
+                                       stripos($observacoes, 'comprar peças') !== false ||
+                                       stripos($observacoes, 'comprar pecas') !== false;
+            
+            if ($temCondicaoComprarPecas) {
+                ?>
+                <!-- Peça comprada - aparece quando precisa comprar peças -->
+                <button onclick="executarAcao(<?= $solicitacao['id'] ?>, 'peca_comprada')" 
+                        class="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    <span class="hidden sm:inline">Peça comprada</span>
+                    <span class="sm:hidden">Comprada</span>
+                </button>
                 <?php
             }
             ?>
@@ -1186,6 +1225,42 @@ $temApi = !empty($solicitacao['imobiliaria_api_id']) || ($solicitacao['imobiliar
     </div>
 </div>
 
+<!-- Modal Peça comprada -->
+<div id="modalPecaComprada" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-check-circle text-emerald-600 mr-2"></i>
+            Informar Peça Comprada
+        </h3>
+        <p class="text-sm text-gray-600 mb-4">
+            Confirme que você comprou a peça. A solicitação será atualizada e nossa equipe entrará em contato para agendar o serviço.
+        </p>
+        <form id="formPecaComprada" onsubmit="processarPecaComprada(event)" enctype="multipart/form-data">
+            <input type="hidden" name="solicitacao_id" value="<?= $solicitacao['id'] ?>">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Observação (opcional)</label>
+                <textarea name="observacao" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" placeholder="Informações adicionais sobre a compra da peça..."></textarea>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Anexos (opcional)</label>
+                <input type="file" id="anexos-peca-comprada" name="anexos[]" multiple accept="image/*,.pdf,.doc,.docx" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" onchange="previewAnexosPecaComprada(this)">
+                <p class="text-xs text-gray-500 mt-1">Você pode anexar nota fiscal, foto da peça, etc.</p>
+                <!-- Preview de imagens -->
+                <div id="preview-anexos-peca-comprada" class="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="fecharModal('modalPecaComprada')" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    Confirmar Compra
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Modal Reagendar -->
 <div id="modalReagendar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
     <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -1316,6 +1391,17 @@ function fecharModal(modalId) {
             preview.innerHTML = '';
         }
     }
+    if (modalId === 'modalPecaComprada') {
+        const preview = document.getElementById('preview-anexos-peca-comprada');
+        if (preview) {
+            preview.innerHTML = '';
+        }
+        // Limpar formulário
+        const form = document.getElementById('formPecaComprada');
+        if (form) {
+            form.reset();
+        }
+    }
 }
 
 function abrirModalFoto(url) {
@@ -1335,6 +1421,7 @@ function executarAcao(solicitacaoId, acao) {
         'cancelado': 'modalCancelando',
         'servico_nao_realizado': 'modalServicoNaoRealizado',
         'comprar_pecas': 'modalComprarPecas',
+        'peca_comprada': 'modalPecaComprada',
         'reembolso': 'modalReembolso',
         'reagendar': 'modalReagendar',
         'ausente': 'modalAusente',
@@ -1525,6 +1612,65 @@ function processarComprarPecas(event) {
         if (data.success) {
             fecharModal('modalComprarPecas');
             alert(data.message || 'Informação registrada com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro: ' + (data.message || 'Erro ao processar'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao processar. Tente novamente.');
+    });
+}
+
+function previewAnexosPecaComprada(input) {
+    const preview = document.getElementById('preview-anexos-peca-comprada');
+    if (!preview) return;
+    
+    preview.innerHTML = '';
+    
+    if (input.files && input.files.length > 0) {
+        Array.from(input.files).forEach((file, index) => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const div = document.createElement('div');
+                    div.className = 'relative';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview" class="w-full h-24 object-cover rounded-lg">
+                        <button type="button" onclick="removerAnexoPreview(${index}, 'anexos-peca-comprada')" 
+                                class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
+                            ×
+                        </button>
+                    `;
+                    preview.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-100 p-2 rounded-lg text-xs text-gray-600';
+                div.textContent = file.name;
+                preview.appendChild(div);
+            }
+        });
+    }
+}
+
+function processarPecaComprada(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    formData.append('acao', 'peca_comprada');
+    
+    fetch('<?= url($locatario['instancia']) ?>/solicitacoes/' + solicitacaoIdAtual + '/acao', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            fecharModal('modalPecaComprada');
+            alert(data.message || 'Peça comprada informada com sucesso! A solicitação será atualizada.');
             location.reload();
         } else {
             alert('Erro: ' + (data.message || 'Erro ao processar'));

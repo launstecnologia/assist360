@@ -4582,39 +4582,30 @@ document.addEventListener('change', function(e) {
         }, 10);
     }
     
-    // Função para atualizar card existente (quando status não mudou, apenas move para topo)
+    // Função para atualizar card existente (quando status mudou, move para nova coluna e topo)
     function atualizarCardExistente(solicitacao, cardExistente) {
         const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
         const statusIdNovo = parseInt(solicitacao.status_id);
         
-        // Se mudou de status, mover para nova coluna
-        if (statusIdAtual !== statusIdNovo) {
-            const novaColuna = encontrarColunaPorStatusId(statusIdNovo);
-            if (novaColuna) {
-                // Atualizar atributos do card
-                cardExistente.setAttribute('data-status-id', statusIdNovo);
-                
-                // Atualizar cor da borda
-                const statusCor = solicitacao.status_cor || '#3B82F6';
-                cardExistente.style.borderColor = statusCor;
-                
-                // Mover para nova coluna
-                moverCardParaTopo(cardExistente, novaColuna);
-                
-                // Atualizar contadores
-                atualizarContadores();
-                
-                console.log(`🔄 Card #${solicitacao.id} movido de status ${statusIdAtual} para ${statusIdNovo} ("${solicitacao.status_nome}")`);
-            } else {
-                console.warn(`⚠️ Coluna não encontrada para status_id ${statusIdNovo} (card #${solicitacao.id})`);
-            }
+        // Sempre mover para nova coluna quando status mudar
+        const novaColuna = encontrarColunaPorStatusId(statusIdNovo);
+        if (novaColuna) {
+            // Atualizar atributos do card
+            cardExistente.setAttribute('data-status-id', statusIdNovo);
+            
+            // Atualizar cor da borda
+            const statusCor = solicitacao.status_cor || '#3B82F6';
+            cardExistente.style.borderColor = statusCor;
+            
+            // Mover para nova coluna E para o topo
+            moverCardParaTopo(cardExistente, novaColuna);
+            
+            // Atualizar contadores
+            atualizarContadores();
+            
+            console.log(`🔄 Card #${solicitacao.id} movido de status ${statusIdAtual} para ${statusIdNovo} ("${solicitacao.status_nome}") e posicionado no topo`);
         } else {
-            // Mesmo status, apenas mover para topo (card foi atualizado)
-            const colunaAtual = cardExistente.closest('.kanban-column');
-            if (colunaAtual) {
-                moverCardParaTopo(cardExistente, colunaAtual);
-                console.log(`⬆️ Card #${solicitacao.id} movido para o topo da coluna "${solicitacao.status_nome}"`);
-            }
+            console.warn(`⚠️ Coluna não encontrada para status_id ${statusIdNovo} (card #${solicitacao.id})`);
         }
     }
     
@@ -4639,8 +4630,8 @@ document.addEventListener('change', function(e) {
         }
         
         const imobiliariaId = new URLSearchParams(window.location.search).get('imobiliaria_id') || '';
-        // Aumentar para 10 segundos para garantir que capture todas as atualizações
-        const url = `<?= url('admin/kanban/solicitacoes-atualizadas') ?>?ultimos_segundos=10${imobiliariaId ? '&imobiliaria_id=' + imobiliariaId : ''}`;
+        // Aumentar para 15 segundos para garantir que capture todas as atualizações (mensagens, respostas, status)
+        const url = `<?= url('admin/kanban/solicitacoes-atualizadas') ?>?ultimos_segundos=15${imobiliariaId ? '&imobiliaria_id=' + imobiliariaId : ''}`;
         
         fetch(url, {
             method: 'GET',
@@ -4710,17 +4701,18 @@ document.addEventListener('change', function(e) {
                     
                     if (cardExistente) {
                         const statusIdAtual = parseInt(cardExistente.getAttribute('data-status-id'));
-                        const infoAntes = cardsAntes.get(solicitacao.id);
                         
-                        // Se mudou de status OU se não temos informação anterior, atualizar
-                        if (statusIdAtual !== statusIdNovo || !infoAntes) {
-                            console.log(`🔄 Detectada mudança no card #${solicitacao.id}: Status ${statusIdAtual} → ${statusIdNovo}`);
+                        // Se mudou de status, atualizar e mover para nova coluna
+                        if (statusIdAtual !== statusIdNovo) {
+                            console.log(`🔄 Detectada mudança de status no card #${solicitacao.id}: ${statusIdAtual} → ${statusIdNovo}`);
                             atualizarCardExistente(solicitacao, cardExistente);
                         } else {
-                            // Mesmo status, apenas mover para topo se foi atualizado recentemente
+                            // Mesmo status, mas houve atualização (mensagem, resposta, etc)
+                            // SEMPRE mover para o topo quando detectar atualização
                             const colunaAtual = cardExistente.closest('.kanban-column');
                             if (colunaAtual) {
                                 moverCardParaTopo(cardExistente, colunaAtual);
+                                console.log(`⬆️ Card #${solicitacao.id} movido para o topo (atualização detectada: mensagem, resposta ou interação)`);
                             }
                         }
                     }
@@ -4756,13 +4748,13 @@ document.addEventListener('change', function(e) {
         // Coletar informações iniciais dos cards
         coletarInfoCards();
         
-        // Iniciar polling a cada 3 segundos (mais frequente para detectar mudanças rapidamente)
-        intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+        // Iniciar polling a cada 2 segundos para atualização em tempo real mais rápida
+        intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 2000);
         
         // Fazer uma busca imediata ao carregar
         buscarSolicitacoesAtualizadas();
         
-        console.log('✅ Atualização automática de cards do Kanban ativada (a cada 3 segundos)');
+        console.log('✅ Atualização automática de cards do Kanban ativada (a cada 2 segundos) - Cards atualizados sempre vão para o topo');
     });
     
     // Parar polling quando a página for escondida (otimização)
@@ -4774,7 +4766,7 @@ document.addEventListener('change', function(e) {
             }
         } else {
             if (!intervaloAtualizacaoCards) {
-                intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 3000);
+                intervaloAtualizacaoCards = setInterval(buscarSolicitacoesAtualizadas, 2000);
                 // Fazer busca imediata ao voltar para a página
                 buscarSolicitacoesAtualizadas();
             }

@@ -34,6 +34,8 @@ class Database
 
     /**
      * Verifica se a conexão está ativa e válida.
+     * Otimizado para evitar queries desnecessárias que podem criar conexões extras.
+     * Usa verificação simples de atributo em vez de executar query.
      */
     private static function isConnectionValid(): bool
     {
@@ -42,14 +44,16 @@ class Database
         }
 
         try {
-            // Tenta executar uma query simples para verificar se a conexão está viva
-            $stmt = self::$instance->prepare('SELECT 1');
-            $stmt->execute();
-            $stmt->closeCursor();
-            $stmt = null;
+            // Verificar se a conexão está viva acessando um atributo simples
+            // Isso não cria statement e é mais eficiente
+            @self::$instance->getAttribute(PDO::ATTR_SERVER_INFO);
             return true;
         } catch (PDOException $e) {
-            // Se a conexão estiver morta, fecha e retorna false
+            // Se houver erro ao acessar atributo, a conexão está morta
+            self::$instance = null;
+            return false;
+        } catch (\Exception $e) {
+            // Qualquer outro erro também indica conexão inválida
             self::$instance = null;
             return false;
         }
@@ -68,8 +72,8 @@ class Database
             }
         }
         
-        // Se não há instância ou a conexão está inválida, cria uma nova
-        if (self::$instance === null || !self::isConnectionValid()) {
+        // Se não há instância, cria uma nova
+        if (self::$instance === null) {
             try {
                 $dsn = sprintf(
                     'mysql:host=%s;dbname=%s;charset=utf8mb4',
@@ -98,6 +102,8 @@ class Database
                 // Se for erro de max_user_connections, tenta aguardar e tentar novamente
                 if (strpos($e->getMessage(), 'max_user_connections') !== false && self::$retryAttempts < self::MAX_RETRY_ATTEMPTS) {
                     self::$retryAttempts++;
+                    // Fechar conexão antes de tentar novamente
+                    self::closeConnection();
                     usleep(self::RETRY_DELAY_MS * 1000 * self::$retryAttempts); // Backoff exponencial
                     return self::getInstance(); // Tenta novamente
                 }
@@ -106,6 +112,16 @@ class Database
                 throw new PDOException('Erro na conexão com o banco de dados: ' . $e->getMessage(), 0, $e);
             }
         } else {
+            // Verificar conexão apenas se estiver inativa há mais de 30 segundos (otimização)
+            // Isso evita verificações desnecessárias em cada chamada
+            if (self::$lastActivityTime !== null && ($currentTime - self::$lastActivityTime) > 30) {
+                if (!self::isConnectionValid()) {
+                    // Conexão inválida, criar nova
+                    self::closeConnection();
+                    return self::getInstance(); // Recursão para criar nova conexão
+                }
+            }
+            
             // Atualiza o tempo da última atividade
             self::$lastActivityTime = $currentTime;
         }

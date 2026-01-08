@@ -31,17 +31,53 @@ class ValidacaoAcessoService
         ];
         
         // REGRA 1: Verificar se CPF está no Bolsão (listagem locatarios_contratos)
+        // IMPORTANTE: Sempre consultar apenas o último bolsão enviado
         if (!empty($cpfLimpo)) {
-            $sql = "SELECT * FROM locatarios_contratos 
-                    WHERE imobiliaria_id = ? 
-                    AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?";
-            $cpfEncontrado = Database::fetch($sql, [$imobiliariaId, $cpfLimpo]);
+            // Verificar se existe algum upload de bolsão para esta imobiliária
+            $sqlUltimoUpload = "SELECT created_at FROM historico_uploads 
+                               WHERE imobiliaria_id = ? 
+                               ORDER BY created_at DESC 
+                               LIMIT 1";
+            $ultimoUpload = Database::fetch($sqlUltimoUpload, [$imobiliariaId]);
             
-            if ($cpfEncontrado) {
-                // REGRA 1: CPF encontrado no Bolsão -> LIBERA ACESSO
+            if ($ultimoUpload) {
+                // Existe upload: buscar CPF apenas no último bolsão (registros criados/atualizados no período do último upload)
+                $dataUpload = $ultimoUpload['created_at'];
+                // Janela de tempo: 5 minutos antes e 10 minutos depois do upload (mesma lógica usada na remoção)
+                $dataInicio = date('Y-m-d H:i:s', strtotime($dataUpload . ' -5 minutes'));
+                $dataFim = date('Y-m-d H:i:s', strtotime($dataUpload . ' +10 minutes'));
+                
+                $sql = "SELECT * FROM locatarios_contratos 
+                        WHERE imobiliaria_id = ? 
+                        AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                        AND (
+                            (created_at >= ? AND created_at <= ?) 
+                            OR 
+                            (updated_at >= ? AND updated_at <= ?)
+                        )
+                        LIMIT 1";
+                $cpfEncontrado = Database::fetch($sql, [
+                    $imobiliariaId, 
+                    $cpfLimpo,
+                    $dataInicio, $dataFim,
+                    $dataInicio, $dataFim
+                ]);
+                
+                if ($cpfEncontrado) {
+                    // REGRA 1: CPF encontrado no último Bolsão -> LIBERA ACESSO
+                    $resultado['permitido'] = true;
+                    $resultado['bolsao'] = true;
+                    error_log("DEBUG [ValidacaoAcessoService] - CPF {$cpfLimpo} encontrado no último Bolsão (upload: {$dataUpload}) - ACESSO LIBERADO");
+                    return $resultado;
+                } else {
+                    // CPF não encontrado no último bolsão -> NÃO libera pelo bolsão
+                    error_log("DEBUG [ValidacaoAcessoService] - CPF {$cpfLimpo} NÃO encontrado no último Bolsão (upload: {$dataUpload}) - Continuando validação...");
+                }
+            } else {
+                // Não existe nenhum upload: LIBERA ACESSO (não bloqueia)
                 $resultado['permitido'] = true;
-                $resultado['bolsao'] = true;
-                error_log("DEBUG [ValidacaoAcessoService] - CPF {$cpfLimpo} encontrado no Bolsão - ACESSO LIBERADO");
+                $resultado['bolsao'] = false;
+                error_log("DEBUG [ValidacaoAcessoService] - Nenhum upload de bolsão encontrado para imobiliaria_id {$imobiliariaId} - ACESSO LIBERADO (sem verificação de bolsão)");
                 return $resultado;
             }
         }

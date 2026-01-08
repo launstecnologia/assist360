@@ -970,13 +970,43 @@ class LocatarioController extends Controller
         }
         
         // ✅ Verificar se CPF está no bolsão (precisa verificar antes de validacao_utilizacao)
+        // IMPORTANTE: Sempre consultar apenas o último bolsão enviado
         $cpfEncontradoNaListagem = false;
         if (!empty($cpfLimpo) && !empty($locatario['imobiliaria_id'])) {
-            $sql = "SELECT * FROM locatarios_contratos 
-                    WHERE imobiliaria_id = ? 
-                    AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?";
-            $cpfEncontradoNaListagem = \App\Core\Database::fetch($sql, [$locatario['imobiliaria_id'], $cpfLimpo]) !== null;
-            error_log("DEBUG [finalizarSolicitacao] - CPF: {$cpfLimpo}, Imobiliaria: {$locatario['imobiliaria_id']}, CPF no bolsão: " . ($cpfEncontradoNaListagem ? 'SIM' : 'NÃO'));
+            // Verificar se existe algum upload de bolsão para esta imobiliária
+            $sqlUltimoUpload = "SELECT created_at FROM historico_uploads 
+                               WHERE imobiliaria_id = ? 
+                               ORDER BY created_at DESC 
+                               LIMIT 1";
+            $ultimoUpload = \App\Core\Database::fetch($sqlUltimoUpload, [$locatario['imobiliaria_id']]);
+            
+            if ($ultimoUpload) {
+                // Existe upload: buscar CPF apenas no último bolsão
+                $dataUpload = $ultimoUpload['created_at'];
+                $dataInicio = date('Y-m-d H:i:s', strtotime($dataUpload . ' -5 minutes'));
+                $dataFim = date('Y-m-d H:i:s', strtotime($dataUpload . ' +10 minutes'));
+                
+                $sql = "SELECT * FROM locatarios_contratos 
+                        WHERE imobiliaria_id = ? 
+                        AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                        AND (
+                            (created_at >= ? AND created_at <= ?) 
+                            OR 
+                            (updated_at >= ? AND updated_at <= ?)
+                        )
+                        LIMIT 1";
+                $cpfEncontradoNaListagem = \App\Core\Database::fetch($sql, [
+                    $locatario['imobiliaria_id'], 
+                    $cpfLimpo,
+                    $dataInicio, $dataFim,
+                    $dataInicio, $dataFim
+                ]) !== null;
+                error_log("DEBUG [finalizarSolicitacao] - CPF: {$cpfLimpo}, Imobiliaria: {$locatario['imobiliaria_id']}, Último upload: {$dataUpload}, CPF no bolsão: " . ($cpfEncontradoNaListagem ? 'SIM' : 'NÃO'));
+            } else {
+                // Não existe upload: libera acesso (não bloqueia)
+                $cpfEncontradoNaListagem = true; // Considera como se estivesse no bolsão para não bloquear
+                error_log("DEBUG [finalizarSolicitacao] - CPF: {$cpfLimpo}, Imobiliaria: {$locatario['imobiliaria_id']}, Nenhum upload encontrado - ACESSO LIBERADO (sem verificação de bolsão)");
+            }
         } else {
             error_log("DEBUG [finalizarSolicitacao] - CPF ou imobiliaria_id vazios - CPF: " . ($cpfLimpo ?? 'NULL') . ", Imobiliaria: " . ($locatario['imobiliaria_id'] ?? 'NULL'));
         }
@@ -1468,17 +1498,47 @@ class LocatarioController extends Controller
         ];
         
         // Verificar se o CPF está na listagem da imobiliária (Bolsão)
+        // IMPORTANTE: Sempre consultar apenas o último bolsão enviado
         $cpfEncontradoNaListagem = false;
         if (!empty($cpfLimpo) && !empty($locatario['imobiliaria_id'])) {
-            $sql = "SELECT * FROM locatarios_contratos 
-                    WHERE imobiliaria_id = ? 
-                    AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?";
-            $resultado = \App\Core\Database::fetch($sql, [$locatario['imobiliaria_id'], $cpfLimpo]);
-            $cpfEncontradoNaListagem = $resultado !== null;
+            // Verificar se existe algum upload de bolsão para esta imobiliária
+            $sqlUltimoUpload = "SELECT created_at FROM historico_uploads 
+                               WHERE imobiliaria_id = ? 
+                               ORDER BY created_at DESC 
+                               LIMIT 1";
+            $ultimoUpload = \App\Core\Database::fetch($sqlUltimoUpload, [$locatario['imobiliaria_id']]);
             
-            error_log("DEBUG [validacao_bolsao - processarNovaSolicitacao] - CPF: {$cpfLimpo}, imobiliaria_id: {$locatario['imobiliaria_id']}, encontrado: " . ($cpfEncontradoNaListagem ? 'SIM' : 'NÃO'));
-            if ($cpfEncontradoNaListagem) {
-                error_log("DEBUG [validacao_bolsao] - CPF encontrado na tabela: " . ($resultado['cpf'] ?? 'N/A'));
+            if ($ultimoUpload) {
+                // Existe upload: buscar CPF apenas no último bolsão
+                $dataUpload = $ultimoUpload['created_at'];
+                $dataInicio = date('Y-m-d H:i:s', strtotime($dataUpload . ' -5 minutes'));
+                $dataFim = date('Y-m-d H:i:s', strtotime($dataUpload . ' +10 minutes'));
+                
+                $sql = "SELECT * FROM locatarios_contratos 
+                        WHERE imobiliaria_id = ? 
+                        AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                        AND (
+                            (created_at >= ? AND created_at <= ?) 
+                            OR 
+                            (updated_at >= ? AND updated_at <= ?)
+                        )
+                        LIMIT 1";
+                $resultado = \App\Core\Database::fetch($sql, [
+                    $locatario['imobiliaria_id'], 
+                    $cpfLimpo,
+                    $dataInicio, $dataFim,
+                    $dataInicio, $dataFim
+                ]);
+                $cpfEncontradoNaListagem = $resultado !== null;
+                
+                error_log("DEBUG [validacao_bolsao - processarNovaSolicitacao] - CPF: {$cpfLimpo}, imobiliaria_id: {$locatario['imobiliaria_id']}, Último upload: {$dataUpload}, encontrado: " . ($cpfEncontradoNaListagem ? 'SIM' : 'NÃO'));
+                if ($cpfEncontradoNaListagem) {
+                    error_log("DEBUG [validacao_bolsao] - CPF encontrado na tabela: " . ($resultado['cpf'] ?? 'N/A'));
+                }
+            } else {
+                // Não existe upload: libera acesso (não bloqueia)
+                $cpfEncontradoNaListagem = true; // Considera como se estivesse no bolsão para não bloquear
+                error_log("DEBUG [validacao_bolsao - processarNovaSolicitacao] - CPF: {$cpfLimpo}, imobiliaria_id: {$locatario['imobiliaria_id']}, Nenhum upload encontrado - ACESSO LIBERADO (sem verificação de bolsão)");
             }
         } else {
             error_log("DEBUG [validacao_bolsao - processarNovaSolicitacao] - CPF vazio ou imobiliaria_id não informado");
@@ -3266,13 +3326,42 @@ class LocatarioController extends Controller
         }
 
         // Buscar na tabela locatarios_contratos
+        // IMPORTANTE: Sempre consultar apenas o último bolsão enviado
         // Comparar removendo formatação de ambos os lados para garantir que funcione
         // Removido LIMIT 1 para buscar TODOS os endereços do CPF
-        $sql = "SELECT * FROM locatarios_contratos 
-                WHERE imobiliaria_id = ? 
-                AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ? 
-                ORDER BY id ASC";
-        $todosEnderecos = \App\Core\Database::fetchAll($sql, [$imobiliaria['id'], $cpfLimpo]);
+        
+        // Verificar se existe algum upload de bolsão para esta imobiliária
+        $sqlUltimoUpload = "SELECT created_at FROM historico_uploads 
+                           WHERE imobiliaria_id = ? 
+                           ORDER BY created_at DESC 
+                           LIMIT 1";
+        $ultimoUpload = \App\Core\Database::fetch($sqlUltimoUpload, [$imobiliaria['id']]);
+        
+        if ($ultimoUpload) {
+            // Existe upload: buscar CPF apenas no último bolsão
+            $dataUpload = $ultimoUpload['created_at'];
+            $dataInicio = date('Y-m-d H:i:s', strtotime($dataUpload . ' -5 minutes'));
+            $dataFim = date('Y-m-d H:i:s', strtotime($dataUpload . ' +10 minutes'));
+            
+            $sql = "SELECT * FROM locatarios_contratos 
+                    WHERE imobiliaria_id = ? 
+                    AND REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                    AND (
+                        (created_at >= ? AND created_at <= ?) 
+                        OR 
+                        (updated_at >= ? AND updated_at <= ?)
+                    )
+                    ORDER BY id ASC";
+            $todosEnderecos = \App\Core\Database::fetchAll($sql, [
+                $imobiliaria['id'], 
+                $cpfLimpo,
+                $dataInicio, $dataFim,
+                $dataInicio, $dataFim
+            ]);
+        } else {
+            // Não existe upload: retornar vazio (não bloqueia, mas não encontra dados)
+            $todosEnderecos = [];
+        }
 
         if (!empty($todosEnderecos)) {
             // CPF encontrado = bolsão validado (validacao_bolsao = 1)
@@ -3641,16 +3730,30 @@ class LocatarioController extends Controller
                     }
                     
                     $statusModel = new \App\Models\Status();
-                    // Buscar "Pendente Cliente" primeiro, depois "Pendente", depois "Aguardando"
+                    // Buscar status "Pendente Cliente" primeiro, depois variações, depois "Pendente", depois "Aguardando"
+                    // IMPORTANTE: Garantir que encontre o status correto para o Kanban atualizar automaticamente
                     $statusPendente = $statusModel->findByNome('Pendente Cliente');
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                    $statusPendente = $statusModel->findByNome('Pendente');
+                        $statusPendente = $statusModel->findByNome('Pendências');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendências Cliente');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
+                    }
+                    
+                    // Log para debug se não encontrar o status
+                    if (!$statusPendente) {
+                        error_log("⚠️ LocatarioController: Status 'Pendente Cliente' não encontrado ao marcar 'comprar peças' [Solicitação ID: {$id}]");
+                    } else {
+                        error_log("✅ LocatarioController: Status encontrado '{$statusPendente['nome']}' (ID: {$statusPendente['id']}) ao marcar 'comprar peças' [Solicitação ID: {$id}]");
                     }
                     
                     $dataLimite = date('Y-m-d', strtotime('+10 days'));
@@ -3665,9 +3768,11 @@ class LocatarioController extends Controller
                     }
                     
                     // Preparar dados de atualização com verificação de colunas existentes
+                    // IMPORTANTE: updated_at será atualizado automaticamente pelo Model, mas garantimos aqui também
                     $updateData = [
                         'condicao_id' => $condicaoId,
-                        'observacoes' => $observacaoFinal
+                        'observacoes' => $observacaoFinal,
+                        'updated_at' => date('Y-m-d H:i:s') // Garantir atualização para o Kanban detectar em tempo real
                     ];
                     
                     if ($statusPendente) {
@@ -3749,6 +3854,76 @@ class LocatarioController extends Controller
                         } else {
                             throw $e;
                         }
+                    }
+                    break;
+                    
+                case 'peca_comprada':
+                    // Remover condição "Comprar peças" e voltar para status "Buscando Prestador"
+                    $condicaoModel = new \App\Models\Condicao();
+                    $condicaoComprarPecas = $condicaoModel->findByNome('Comprar peças');
+                    
+                    $statusModel = new \App\Models\Status();
+                    $statusBuscando = $statusModel->findByNome('Buscando Prestador');
+                    if (!$statusBuscando) {
+                        $statusBuscando = $statusModel->findByNome('Nova Solicitação');
+                    }
+                    
+                    $observacaoFinal = $observacaoBase;
+                    if (!empty($observacaoInput)) {
+                        $observacaoFinal .= "\n\n[Peça comprada em {$timestamp}] Observação: {$observacaoInput}";
+                    } else {
+                        $observacaoFinal .= "\n\n[Peça comprada em {$timestamp}] Locatário informou que comprou a peça.";
+                    }
+                    if (!empty($anexosSalvos)) {
+                        $observacaoFinal .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                    }
+                    
+                    // Preparar dados de atualização
+                    $updateData = [
+                        'observacoes' => $observacaoFinal,
+                        'updated_at' => date('Y-m-d H:i:s') // Garantir atualização para o Kanban detectar em tempo real
+                    ];
+                    
+                    // Remover condição "Comprar peças"
+                    if ($condicaoComprarPecas) {
+                        $updateData['condicao_id'] = null;
+                    }
+                    
+                    // Atualizar status para "Buscando Prestador"
+                    if ($statusBuscando) {
+                        $updateData['status_id'] = $statusBuscando['id'];
+                    }
+                    
+                    // Limpar campos relacionados a compra de peças
+                    if ($this->solicitacaoModel->colunaExisteBanco('data_limite_peca')) {
+                        $updateData['data_limite_peca'] = null;
+                    }
+                    if ($this->solicitacaoModel->colunaExisteBanco('data_ultimo_lembrete')) {
+                        $updateData['data_ultimo_lembrete'] = null;
+                    }
+                    if ($this->solicitacaoModel->colunaExisteBanco('lembretes_enviados')) {
+                        $updateData['lembretes_enviados'] = 0;
+                    }
+                    
+                    try {
+                        $this->solicitacaoModel->update($id, $updateData);
+                        
+                        // Registrar no histórico
+                        if ($statusBuscando) {
+                            $observacaoHistorico = "[Peça comprada em {$timestamp}]";
+                            if (!empty($observacaoInput)) {
+                                $observacaoHistorico .= " Observação: {$observacaoInput}";
+                            }
+                            if (!empty($anexosSalvos)) {
+                                $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                            }
+                            $this->registrarHistoricoLocatario($id, $statusBuscando['id'], $observacaoHistorico);
+                        }
+                        
+                        $this->json(['success' => true, 'message' => 'Peça comprada informada com sucesso! A solicitação foi atualizada e nossa equipe entrará em contato em breve.']);
+                    } catch (\Exception $e) {
+                        error_log('Erro ao informar peça comprada: ' . $e->getMessage());
+                        $this->json(['success' => false, 'message' => 'Erro ao processar. Tente novamente.'], 500);
                     }
                     break;
                     
@@ -4264,16 +4439,30 @@ class LocatarioController extends Controller
                         $condicaoId = $condicao['id'];
                     }
                     
-                    // Buscar "Pendente Cliente" primeiro, depois "Pendente", depois "Aguardando"
+                    // Buscar status "Pendente Cliente" primeiro, depois variações, depois "Pendente", depois "Aguardando"
+                    // IMPORTANTE: Garantir que encontre o status correto para o Kanban atualizar automaticamente
                     $statusPendente = $statusModel->findByNome('Pendente Cliente');
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('PENDENTE CLIENTE');
                     }
                     if (!$statusPendente) {
-                    $statusPendente = $statusModel->findByNome('Pendente');
+                        $statusPendente = $statusModel->findByNome('Pendências');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendências Cliente');
+                    }
+                    if (!$statusPendente) {
+                        $statusPendente = $statusModel->findByNome('Pendente');
                     }
                     if (!$statusPendente) {
                         $statusPendente = $statusModel->findByNome('Aguardando');
+                    }
+                    
+                    // Log para debug se não encontrar o status
+                    if (!$statusPendente) {
+                        error_log("⚠️ LocatarioController (Token): Status 'Pendente Cliente' não encontrado ao marcar 'comprar peças' [Solicitação ID: {$solicitacaoId}]");
+                    } else {
+                        error_log("✅ LocatarioController (Token): Status encontrado '{$statusPendente['nome']}' (ID: {$statusPendente['id']}) ao marcar 'comprar peças' [Solicitação ID: {$solicitacaoId}]");
                     }
                     
                     $dataLimite = date('Y-m-d', strtotime('+10 days'));
@@ -4290,9 +4479,11 @@ class LocatarioController extends Controller
                     }
                     
                     // Preparar dados de atualização com verificação de colunas existentes
+                    // IMPORTANTE: updated_at será atualizado automaticamente pelo Model, mas garantimos aqui também
                     $updateData = [
                         'condicao_id' => $condicaoId,
-                        'observacoes' => $observacaoFinal
+                        'observacoes' => $observacaoFinal,
+                        'updated_at' => date('Y-m-d H:i:s') // Garantir atualização para o Kanban detectar em tempo real
                     ];
                     
                     if ($statusPendente) {
@@ -4374,6 +4565,76 @@ class LocatarioController extends Controller
                         } else {
                             throw $e;
                         }
+                    }
+                    break;
+                    
+                case 'peca_comprada':
+                    // Remover condição "Comprar peças" e voltar para status "Buscando Prestador" (token público)
+                    $condicaoModel = new \App\Models\Condicao();
+                    $condicaoComprarPecas = $condicaoModel->findByNome('Comprar peças');
+                    
+                    $statusModel = new \App\Models\Status();
+                    $statusBuscando = $statusModel->findByNome('Buscando Prestador');
+                    if (!$statusBuscando) {
+                        $statusBuscando = $statusModel->findByNome('Nova Solicitação');
+                    }
+                    
+                    $observacaoFinal = $observacaoBase;
+                    if (!empty($observacaoInput)) {
+                        $observacaoFinal .= "\n\n[Peça comprada em {$timestamp}] Observação: {$observacaoInput}";
+                    } else {
+                        $observacaoFinal .= "\n\n[Peça comprada em {$timestamp}] Locatário informou que comprou a peça.";
+                    }
+                    if (!empty($anexosSalvos)) {
+                        $observacaoFinal .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                    }
+                    
+                    // Preparar dados de atualização
+                    $updateData = [
+                        'observacoes' => $observacaoFinal,
+                        'updated_at' => date('Y-m-d H:i:s') // Garantir atualização para o Kanban detectar em tempo real
+                    ];
+                    
+                    // Remover condição "Comprar peças"
+                    if ($condicaoComprarPecas) {
+                        $updateData['condicao_id'] = null;
+                    }
+                    
+                    // Atualizar status para "Buscando Prestador"
+                    if ($statusBuscando) {
+                        $updateData['status_id'] = $statusBuscando['id'];
+                    }
+                    
+                    // Limpar campos relacionados a compra de peças
+                    if ($this->solicitacaoModel->colunaExisteBanco('data_limite_peca')) {
+                        $updateData['data_limite_peca'] = null;
+                    }
+                    if ($this->solicitacaoModel->colunaExisteBanco('data_ultimo_lembrete')) {
+                        $updateData['data_ultimo_lembrete'] = null;
+                    }
+                    if ($this->solicitacaoModel->colunaExisteBanco('lembretes_enviados')) {
+                        $updateData['lembretes_enviados'] = 0;
+                    }
+                    
+                    try {
+                        $this->solicitacaoModel->update($solicitacaoId, $updateData);
+                        
+                        // Registrar no histórico
+                        if ($statusBuscando) {
+                            $observacaoHistorico = "[Peça comprada em {$timestamp}]";
+                            if (!empty($observacaoInput)) {
+                                $observacaoHistorico .= " Observação: {$observacaoInput}";
+                            }
+                            if (!empty($anexosSalvos)) {
+                                $observacaoHistorico .= "\nAnexos: " . implode(', ', $anexosSalvos);
+                            }
+                            $this->registrarHistoricoLocatario($solicitacaoId, $statusBuscando['id'], $observacaoHistorico);
+                        }
+                        
+                        $this->json(['success' => true, 'message' => 'Peça comprada informada com sucesso! A solicitação foi atualizada e nossa equipe entrará em contato em breve.']);
+                    } catch (\Exception $e) {
+                        error_log('Erro ao informar peça comprada (token): ' . $e->getMessage());
+                        $this->json(['success' => false, 'message' => 'Erro ao processar. Tente novamente.'], 500);
                     }
                     break;
                     

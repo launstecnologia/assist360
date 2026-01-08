@@ -366,13 +366,19 @@ class DashboardController extends Controller
      * Endpoint AJAX para buscar solicitações atualizadas recentemente
      * Retorna solicitações que foram atualizadas nos últimos segundos
      * Usado para atualizar automaticamente o Kanban quando status muda ou há interações
+     * 
+     * Detecta atualizações de:
+     * - Mudança de status
+     * - Mensagens do WhatsApp (enviadas ou recebidas)
+     * - Respostas do locatário
+     * - Qualquer interação que atualize o campo updated_at
      */
     public function solicitacoesAtualizadas(): void
     {
         $this->requireAuth();
         
         $imobiliariaId = $this->input('imobiliaria_id');
-        $ultimosSegundos = (int)($this->input('ultimos_segundos') ?? 5); // Padrão: últimos 5 segundos
+        $ultimosSegundos = (int)($this->input('ultimos_segundos') ?? 15); // Padrão: últimos 15 segundos
         
         // Buscar solicitações atualizadas recentemente
         $sql = "

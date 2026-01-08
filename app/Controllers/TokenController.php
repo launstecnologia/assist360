@@ -1798,10 +1798,12 @@ class TokenController extends Controller
                     $dataLimite = date('Y-m-d', strtotime('+10 days'));
 
                     // Preparar dados de atualização com verificação de colunas existentes
+                    // IMPORTANTE: updated_at será atualizado automaticamente pelo Model, mas garantimos aqui também
                     $updateData = [
                         'status_id' => $statusPendente['id'] ?? $solicitacao['status_id'],
                         'condicao_id' => $condicaoId,
-                        'observacoes' => ($solicitacao['observacoes'] ?? '') . "\n\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite))
+                        'observacoes' => ($solicitacao['observacoes'] ?? '') . "\n\nLocatário precisa comprar peças. Prazo: " . date('d/m/Y', strtotime($dataLimite)),
+                        'updated_at' => date('Y-m-d H:i:s') // Garantir atualização para o Kanban detectar em tempo real
                     ];
 
                     if ($this->solicitacaoModel->colunaExisteBanco('data_limite_peca')) {
