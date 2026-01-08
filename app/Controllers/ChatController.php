@@ -197,6 +197,9 @@ class ChatController extends Controller
                 'updated_at' => date('Y-m-d H:i:s')
             ];
             $this->mensagemModel->update($mensagemId, $updateData);
+            
+            // Atualizar updated_at da solicitação para que o card vá para o topo do Kanban
+            $this->solicitacaoModel->update($solicitacaoId, []);
 
             $this->json([
                 'success' => true,
@@ -214,6 +217,9 @@ class ChatController extends Controller
                 'erro' => $e->getMessage(),
                 'updated_at' => date('Y-m-d H:i:s')
             ]);
+            
+            // Atualizar updated_at da solicitação mesmo em caso de erro (houve tentativa de interação)
+            $this->solicitacaoModel->update($solicitacaoId, []);
 
             $this->json([
                 'success' => false,
@@ -506,6 +512,11 @@ class ChatController extends Controller
 
                 $mensagemId = $this->mensagemModel->create($mensagemData);
                 error_log("✅ Mensagem salva com ID: $mensagemId");
+                
+                // Atualizar updated_at da solicitação para que o card vá para o topo do Kanban
+                if (isset($solicitacao['id'])) {
+                    $this->solicitacaoModel->update($solicitacao['id'], []);
+                }
             }
         } catch (\Exception $e) {
             error_log("❌ Erro ao processar mensagem recebida: " . $e->getMessage());

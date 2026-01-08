@@ -88,6 +88,14 @@ abstract class Model
             return true;
         }
         
+        // Verificar se a tabela tem coluna updated_at
+        $hasUpdatedAt = $this->hasUpdatedAtColumn();
+        
+        // Sempre atualizar updated_at automaticamente se a coluna existir
+        if ($hasUpdatedAt) {
+            $fillableData['updated_at'] = date('Y-m-d H:i:s');
+        }
+        
         $fields = array_keys($fillableData);
         $setClause = array_map(fn($field) => "$field = ?", $fields);
         
@@ -107,6 +115,27 @@ abstract class Model
             // Relançar a exceção para que o controller possa tratá-la
             throw $e;
         }
+    }
+    
+    /**
+     * Verifica se a tabela tem coluna updated_at
+     */
+    private function hasUpdatedAtColumn(): bool
+    {
+        static $columnCache = [];
+        
+        if (!isset($columnCache[$this->table])) {
+            try {
+                $sql = "SHOW COLUMNS FROM {$this->table} LIKE 'updated_at'";
+                $result = Database::fetch($sql);
+                $columnCache[$this->table] = !empty($result);
+            } catch (\Exception $e) {
+                // Se der erro, assumir que não tem
+                $columnCache[$this->table] = false;
+            }
+        }
+        
+        return $columnCache[$this->table] ?? false;
     }
 
     public function delete(int $id): bool

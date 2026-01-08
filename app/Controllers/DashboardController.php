@@ -249,7 +249,7 @@ class DashboardController extends Controller
                 $sql .= " AND (s.updated_at IS NULL OR s.updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY))";
             }
             
-            $sql .= " ORDER BY s.created_at DESC LIMIT 50";
+            $sql .= " ORDER BY s.updated_at DESC, s.created_at DESC LIMIT 50";
             
             $solicitacoesPorStatus[$status['id']] = \App\Core\Database::fetchAll($sql, $params);
         }
@@ -350,7 +350,7 @@ class DashboardController extends Controller
             $params[] = $imobiliariaId;
         }
         
-        $sql .= " ORDER BY s.created_at DESC LIMIT 50";
+        $sql .= " ORDER BY s.updated_at DESC, s.created_at DESC LIMIT 50";
         
         $solicitacoes = \App\Core\Database::fetchAll($sql, $params);
         
