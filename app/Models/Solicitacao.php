@@ -155,7 +155,7 @@ class Solicitacao extends Model
             $sql .= " WHERE (s.tipo_qualificacao IS NULL OR s.tipo_qualificacao = 'CORTESIA' OR s.tipo_qualificacao = 'BOLSAO')";
         }
         
-        $sql .= " ORDER BY kanban_ordem ASC, s.created_at DESC";
+        $sql .= " ORDER BY kanban_ordem ASC, s.updated_at DESC, s.created_at DESC";
         
         return Database::fetchAll($sql);
     }

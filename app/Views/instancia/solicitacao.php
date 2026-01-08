@@ -17,49 +17,74 @@ function processarObservacoesComImagens($texto) {
         return '';
     }
     
-    // Escapar HTML primeiro
-    $texto = htmlspecialchars($texto);
-    
-    // Padrão para encontrar "Anexos: " seguido de links
-    // Exemplo: "Anexos: uploads/solicitacoes/123/anexos/anexo_123.jpg, uploads/solicitacoes/123/anexos/anexo_456.png"
-    $texto = preg_replace_callback(
-        '/(Anexos:\s*)([^\n]+)/i',
+    // NÃO escapar HTML primeiro - processar anexos antes
+    // Padrão mais flexível para encontrar "Anexos:" seguido de caminhos
+    // Pode ter espaço após os dois pontos ou não, e aceita múltiplos caminhos separados por vírgula
+    // Usar modo multiline para capturar linhas completas
+    $textoProcessado = preg_replace_callback(
+        '/^.*?(Anexos?[:\s]+)(.+)$/im',
         function($matches) {
-            $prefixo = $matches[1];
+            $prefixo = htmlspecialchars(trim($matches[1]));
             $anexos = trim($matches[2]);
+            
+            if (empty($anexos)) {
+                return htmlspecialchars($matches[0]);
+            }
             
             // Separar anexos por vírgula
             $listaAnexos = preg_split('/,\s*/', $anexos);
-            $html = $prefixo . '<br>';
+            $html = '';
+            
+            // Manter o texto antes de "Anexos:" escapado
+            $antesAnexos = trim(str_replace($matches[1] . $matches[2], '', $matches[0]));
+            if (!empty($antesAnexos)) {
+                $html .= htmlspecialchars($antesAnexos) . '<br>';
+            }
+            
+            $html .= $prefixo . '<br>';
             $html .= '<div class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3">';
             
             foreach ($listaAnexos as $anexo) {
                 $anexo = trim($anexo);
                 if (empty($anexo)) continue;
                 
+                // Remover espaços extras e caracteres de controle
+                $anexoLimpo = trim(preg_replace('/[\x00-\x1F\x7F]/', '', $anexo));
+                
+                // Verificar se parece ser um caminho válido (deve conter "uploads" e extensão de arquivo)
+                if (empty($anexoLimpo) || !preg_match('/uploads.*\.(jpg|jpeg|png|gif|webp|pdf|doc|docx)$/i', $anexoLimpo)) {
+                    // Se não for um caminho válido, apenas mostrar como texto
+                    continue;
+                }
+                
                 // Construir URL completa
-                $urlAnexo = url('Public/' . $anexo);
+                $urlAnexo = url('Public/' . $anexoLimpo);
                 
                 // Verificar se é imagem (extensões comuns)
-                $extensao = strtolower(pathinfo($anexo, PATHINFO_EXTENSION));
+                $extensao = strtolower(pathinfo($anexoLimpo, PATHINFO_EXTENSION));
                 $ehImagem = in_array($extensao, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
                 
                 if ($ehImagem) {
                     // Exibir como imagem
-                    $nomeArquivo = htmlspecialchars(basename($anexo));
+                    $nomeArquivo = htmlspecialchars(basename($anexoLimpo));
+                    // Escapar aspas simples e duplas para o JavaScript
+                    $urlEscapada = htmlspecialchars($urlAnexo, ENT_QUOTES | ENT_HTML5);
+                    // Substituir aspas simples por código HTML para evitar quebra do onclick
+                    $urlEscapada = str_replace("'", "&#39;", $urlEscapada);
                     $html .= '<div class="relative">';
                     $html .= '<img src="' . htmlspecialchars($urlAnexo) . '" ';
                     $html .= 'alt="' . $nomeArquivo . '" ';
-                    $html .= 'class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity" ';
-                    $html .= 'onclick="abrirModalFoto(\'' . htmlspecialchars($urlAnexo) . '\')" ';
+                    $html .= 'class="w-full h-32 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-75 transition-opacity shadow-sm" ';
+                    $html .= 'onclick="abrirModalFoto(\'' . $urlEscapada . '\')" ';
                     $html .= 'onerror="this.parentElement.style.display=\'none\';">';
                     $html .= '</div>';
                 } else {
                     // Exibir como link para PDF/Word
-                    $nomeArquivo = htmlspecialchars(basename($anexo));
-                    $html .= '<div class="flex items-center p-2 bg-gray-100 rounded-lg">';
+                    $nomeArquivo = htmlspecialchars(basename($anexoLimpo));
+                    $urlEscapada = htmlspecialchars($urlAnexo, ENT_QUOTES);
+                    $html .= '<div class="flex items-center p-2 bg-gray-100 rounded-lg border border-gray-200">';
                     $html .= '<i class="fas fa-file-alt text-gray-600 mr-2"></i>';
-                    $html .= '<a href="' . htmlspecialchars($urlAnexo) . '" target="_blank" class="text-sm text-blue-600 hover:text-blue-800 truncate">';
+                    $html .= '<a href="' . $urlEscapada . '" target="_blank" class="text-sm text-blue-600 hover:text-blue-800 truncate">';
                     $html .= $nomeArquivo;
                     $html .= '</a>';
                     $html .= '</div>';
@@ -72,10 +97,26 @@ function processarObservacoesComImagens($texto) {
         $texto
     );
     
-    // Converter quebras de linha para <br>
-    $texto = nl2br($texto);
+    // Agora escapar o resto do texto (exceto o HTML que já foi gerado)
+    // Dividir por linhas para processar separadamente
+    $linhas = explode("\n", $textoProcessado);
+    $resultado = [];
     
-    return $texto;
+    foreach ($linhas as $linha) {
+        // Se a linha contém HTML gerado (div ou img), não escapar
+        if (preg_match('/<(div|img|a|i)/i', $linha)) {
+            $resultado[] = $linha;
+        } else {
+            // Escapar HTML normal
+            $resultado[] = htmlspecialchars($linha);
+        }
+    }
+    
+    // Converter quebras de linha para <br> (mas não onde já há HTML)
+    $textoFinal = implode("\n", $resultado);
+    $textoFinal = preg_replace('/\n(?!<)/', '<br>', $textoFinal);
+    
+    return $textoFinal;
 }
 ?>
 
