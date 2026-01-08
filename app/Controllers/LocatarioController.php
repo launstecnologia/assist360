@@ -1179,7 +1179,45 @@ class LocatarioController extends Controller
         }
         
         // Criar solicitação
-        $solicitacaoId = $this->solicitacaoModel->create($data);
+        try {
+            $solicitacaoId = $this->solicitacaoModel->create($data);
+            
+            if (!$solicitacaoId || $solicitacaoId <= 0) {
+                error_log("ERRO [finalizarSolicitacao] - create() retornou ID inválido: " . $solicitacaoId);
+                error_log("Dados tentados: " . json_encode($data));
+                $instancia = $locatario['instancia'];
+                $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+                
+                if ($isAjax) {
+                    $this->json([
+                        'success' => false,
+                        'message' => 'Erro ao criar solicitação. ID inválido retornado.'
+                    ]);
+                } else {
+                    $this->redirect(url($instancia . '/nova-solicitacao?error=' . urlencode('Erro ao criar solicitação. Tente novamente.')));
+                }
+                return;
+            }
+            
+            error_log("✅ [finalizarSolicitacao] - Solicitação criada com sucesso. ID: {$solicitacaoId}");
+        } catch (\Exception $e) {
+            error_log("ERRO [finalizarSolicitacao] ao criar solicitação: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
+            error_log("Dados tentados: " . json_encode($data));
+            
+            $instancia = $locatario['instancia'];
+            $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+            
+            if ($isAjax) {
+                $this->json([
+                    'success' => false,
+                    'message' => 'Erro ao criar solicitação: ' . $e->getMessage()
+                ]);
+            } else {
+                $this->redirect(url($instancia . '/nova-solicitacao?error=' . urlencode('Erro ao criar solicitação: ' . $e->getMessage())));
+            }
+            return;
+        }
         
         // Garantir que tipo_qualificacao foi salvo corretamente
         if ($solicitacaoId && $this->solicitacaoModel->colunaExisteBanco('tipo_qualificacao') && isset($tipoQualificacao) && !empty($tipoQualificacao)) {
@@ -2538,7 +2576,22 @@ class LocatarioController extends Controller
                     'datas_opcoes' => $horariosJson
                 ];
                 
-                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+                try {
+                    $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+                    
+                    if (!$solicitacaoId || $solicitacaoId <= 0) {
+                        error_log("ERRO [finalizarSolicitacaoManual - múltiplas categorias] - create() retornou ID inválido: " . $solicitacaoId);
+                        error_log("Dados tentados: " . json_encode($dadosSolicitacao));
+                        $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação. Tente novamente.')));
+                        return;
+                    }
+                } catch (\Exception $e) {
+                    error_log("ERRO [finalizarSolicitacaoManual - múltiplas categorias] ao criar solicitação: " . $e->getMessage());
+                    error_log("Stack trace: " . $e->getTraceAsString());
+                    error_log("Dados tentados: " . json_encode($dadosSolicitacao));
+                    $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação: ' . $e->getMessage())));
+                    return;
+                }
                 
                 if ($solicitacaoId) {
                     // Gerar token de acesso
@@ -2674,19 +2727,34 @@ class LocatarioController extends Controller
             $tokenAcesso = bin2hex(random_bytes(32)); // 64 caracteres
             
             // Criar solicitação normal
-            $solicitacaoModel = new \App\Models\Solicitacao();
-            $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
-            
-            // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
-            if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
-                // Verificar se precisa atualizar
-                $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
-                if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
-                    if (empty($solicitacaoCriada['tipo_qualificacao'])) {
-                        \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
-                        error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
+            try {
+                $solicitacaoModel = new \App\Models\Solicitacao();
+                $solicitacaoId = $solicitacaoModel->create($dadosSolicitacao);
+                
+                if (!$solicitacaoId || $solicitacaoId <= 0) {
+                    error_log("ERRO [finalizarSolicitacaoManual] - create() retornou ID inválido: " . $solicitacaoId);
+                    error_log("Dados tentados: " . json_encode($dadosSolicitacao));
+                    $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação. Tente novamente.')));
+                    return;
+                }
+                
+                // Garantir que tipo_qualificacao seja 'BOLSAO' se validacao_bolsao = 1 (pode não ter sido salvo se coluna não existia)
+                if ($solicitacaoId && $solicitacaoModel->colunaExisteBanco('tipo_qualificacao')) {
+                    // Verificar se precisa atualizar
+                    $solicitacaoCriada = $solicitacaoModel->find($solicitacaoId);
+                    if ($solicitacaoCriada && isset($dadosSolicitacao['validacao_bolsao']) && $dadosSolicitacao['validacao_bolsao'] == 1) {
+                        if (empty($solicitacaoCriada['tipo_qualificacao'])) {
+                            \App\Core\Database::query("UPDATE solicitacoes SET tipo_qualificacao = 'BOLSAO' WHERE id = ?", [$solicitacaoId]);
+                            error_log("DEBUG [finalizarSolicitacaoManual] - Atualizado tipo_qualificacao para BOLSAO na solicitação #{$solicitacaoId}");
+                        }
                     }
                 }
+            } catch (\Exception $e) {
+                error_log("ERRO [finalizarSolicitacaoManual] ao criar solicitação: " . $e->getMessage());
+                error_log("Stack trace: " . $e->getTraceAsString());
+                error_log("Dados tentados: " . json_encode($dadosSolicitacao));
+                $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação: ' . $e->getMessage())));
+                return;
             }
             
             // Salvar token de acesso na solicitação (se a coluna existir)
@@ -2901,7 +2969,22 @@ class LocatarioController extends Controller
                     }
                     
                     // Criar solicitação manual
-                    $id = $solicitacaoManualModel->create($dadosParaSalvar);
+                    try {
+                        $id = $solicitacaoManualModel->create($dadosParaSalvar);
+                        
+                        if (!$id || $id <= 0) {
+                            error_log("ERRO [finalizarSolicitacaoManual - solicitação manual] - create() retornou ID inválido: " . $id);
+                            error_log("Dados tentados: " . json_encode($dadosParaSalvar));
+                            $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação. Tente novamente.')));
+                            return;
+                        }
+                    } catch (\Exception $e) {
+                        error_log("ERRO [finalizarSolicitacaoManual - solicitação manual] ao criar: " . $e->getMessage());
+                        error_log("Stack trace: " . $e->getTraceAsString());
+                        error_log("Dados tentados: " . json_encode($dadosParaSalvar));
+                        $this->redirect($urlBase('/etapa/5?error=' . urlencode('Erro ao salvar solicitação: ' . $e->getMessage())));
+                        return;
+                    }
                     
                     // Nota: Contagem de CPF será atualizada apenas quando a solicitação for CONCLUÍDA
             

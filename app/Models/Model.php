@@ -75,25 +75,56 @@ abstract class Model
         error_log("Model::create [{$this->table}] - SQL: " . $sql);
         error_log("Model::create [{$this->table}] - Valores: " . json_encode($values));
         
-        Database::query($sql, $values);
-        return (int) Database::lastInsertId();
+        try {
+            Database::query($sql, $values);
+            $lastId = Database::lastInsertId();
+            $lastIdInt = (int) $lastId;
+            
+            if ($lastIdInt <= 0) {
+                error_log("⚠️ Model::create [{$this->table}] - lastInsertId retornou valor inválido: '{$lastId}' (int: {$lastIdInt})");
+                // Tentar buscar o último ID inserido manualmente
+                $result = Database::fetch("SELECT LAST_INSERT_ID() as id");
+                if ($result && isset($result['id']) && $result['id'] > 0) {
+                    $lastIdInt = (int) $result['id'];
+                    error_log("✅ Model::create [{$this->table}] - ID recuperado via SELECT: {$lastIdInt}");
+                } else {
+                    error_log("❌ Model::create [{$this->table}] - Não foi possível recuperar o ID inserido");
+                    throw new \Exception("Não foi possível obter o ID da solicitação criada");
+                }
+            } else {
+                error_log("✅ Model::create [{$this->table}] - Solicitação criada com ID: {$lastIdInt}");
+            }
+            
+            return $lastIdInt;
+        } catch (\PDOException $e) {
+            error_log("❌ Model::create [{$this->table}] - Erro PDO: " . $e->getMessage());
+            error_log("SQL: " . $sql);
+            error_log("Valores: " . json_encode($values));
+            error_log("Stack trace: " . $e->getTraceAsString());
+            throw $e;
+        } catch (\Exception $e) {
+            error_log("❌ Model::create [{$this->table}] - Erro: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
+            throw $e;
+        }
     }
 
     public function update(int $id, array $data): bool
     {
         $fillableData = $this->filterFillable($data);
         
-        // Se não há dados para atualizar, retorna true (não é erro)
-        if (empty($fillableData)) {
-            return true;
-        }
-        
-        // Verificar se a tabela tem coluna updated_at
+        // Verificar se a tabela tem coluna updated_at ANTES de verificar se está vazio
         $hasUpdatedAt = $this->hasUpdatedAtColumn();
         
         // Sempre atualizar updated_at automaticamente se a coluna existir
+        // Isso garante que mesmo com array vazio, updated_at será atualizado
         if ($hasUpdatedAt) {
             $fillableData['updated_at'] = date('Y-m-d H:i:s');
+        }
+        
+        // Se não há dados para atualizar (e não tem updated_at), retorna true
+        if (empty($fillableData)) {
+            return true;
         }
         
         $fields = array_keys($fillableData);
